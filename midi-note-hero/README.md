@@ -20,6 +20,10 @@ Easy mode is the default and only uses notes `60` to `72`. Middle mode uses `48`
 
 The falling notes are positioned over a rendered piano keyboard: white notes align to white keys, and sharp/flat notes align to the black keys between them.
 
+Turn on `White keys only` to stop rounds from targeting black keys. Imported MIDI/audio notes are remapped to the nearest playable white key while that option is enabled.
+
 ## MIDI song import
 
-Use the Song file input to load a `.mid` or `.midi` file. The app parses note-on events and uses them to generate the next round. In Easy or Middle mode, imported notes are folded by octave into the active keyboard range so the round stays playable on a smaller section of the keyboard.
+Use the Song file input to load a `.mid`, `.midi`, or audio file such as `.mp3`. MIDI files use their real note-on events. Audio files are decoded in the browser and converted into a rough generated chart by detecting strong note/onset moments and estimating pitch near each onset. In Easy or Middle mode, imported/generated notes are kept inside the active keyboard range so the round stays playable on a smaller section of the keyboard.
+
+MP3 generation is approximate. It is good enough for a first playable chart, but MIDI files will produce much cleaner note rounds because they contain actual note data.

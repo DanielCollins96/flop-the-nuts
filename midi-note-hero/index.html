@@ -51,6 +51,10 @@
               <option value="full">Full custom</option>
             </select>
           </label>
+          <label class="check-control">
+            <input id="whiteKeysOnly" type="checkbox" />
+            White keys only
+          </label>
           <label>
             MIDI input
             <select id="inputSelect" disabled>
@@ -75,7 +79,7 @@
           </label>
           <label class="file-control">
             Song
-            <input id="midiFileInput" type="file" accept=".mid,.midi,audio/midi" />
+            <input id="midiFileInput" type="file" accept=".mid,.midi,.mp3,audio/midi,audio/mpeg,audio/*" />
           </label>
         </div>
       </section>

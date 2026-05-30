@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Flop the Nuts</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="table-panel" aria-labelledby="game-title">
+        <header class="top-bar">
+          <div>
+            <p class="eyebrow">Texas Hold'em flop trainer</p>
+            <h1 id="game-title">Flop the Nuts</h1>
+          </div>
+          <div class="controls" aria-label="Flop controls">
+            <label class="opponent-control" for="opponent-count">
+              <span>Opponents</span>
+              <select id="opponent-count">
+                <option value="1" selected>1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+                <option value="7">7</option>
+                <option value="8">8</option>
+              </select>
+            </label>
+            <button id="previous-flop" class="icon-button" type="button" title="Previous flop" aria-label="Previous flop">
+              <span aria-hidden="true">‹</span>
+            </button>
+            <button id="next-flop" class="primary-button" type="button">New flop</button>
+            <button id="copy-flop" class="icon-button" type="button" title="Copy flop" aria-label="Copy flop">
+              <span aria-hidden="true">⧉</span>
+            </button>
+          </div>
+        </header>
+
+        <div class="felt">
+          <div class="board-zone">
+            <p class="zone-label">Flop</p>
+            <div id="flop-cards" class="card-row board-cards" aria-live="polite"></div>
+          </div>
+
+          <div class="nut-readout" aria-live="polite">
+            <span class="readout-kicker">The nuts</span>
+            <div id="nut-combo" class="nut-combo"></div>
+            <strong id="nut-name">-</strong>
+            <span id="nut-meta" class="nut-meta"></span>
+          </div>
+        </div>
+
+        <section class="stats-grid" aria-label="Current flop summary">
+          <div>
+            <span>Combos</span>
+            <strong id="combo-count">0</strong>
+          </div>
+          <div>
+            <span>Hand tiers</span>
+            <strong id="tier-count">0</strong>
+          </div>
+          <div>
+            <span>Board texture</span>
+            <strong id="board-texture">-</strong>
+          </div>
+        </section>
+      </section>
+
+      <aside class="ranking-panel" aria-labelledby="ranking-title">
+        <div class="ranking-header">
+          <div>
+            <p class="eyebrow">Best two-card hands</p>
+            <h2 id="ranking-title">All hand tiers</h2>
+          </div>
+          <span id="flop-code" class="flop-code">---</span>
+        </div>
+        <div id="ranking-list" class="ranking-list"></div>
+      </aside>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

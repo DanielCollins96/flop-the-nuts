@@ -12,6 +12,7 @@ const startButton = document.querySelector("#startButton");
 const stopButton = document.querySelector("#stopButton");
 const panicButton = document.querySelector("#panicButton");
 const difficultySelect = document.querySelector("#difficultySelect");
+const whiteKeysOnlyInput = document.querySelector("#whiteKeysOnly");
 const activeNotesEl = document.querySelector("#activeNotes");
 const eventLog = document.querySelector("#eventLog");
 const scoreEl = document.querySelector("#score");
@@ -26,6 +27,7 @@ const midiFileInput = document.querySelector("#midiFileInput");
 const activeNotes = new Map();
 const playingVoices = new Map();
 const fallingNotes = [];
+const keyFlashes = [];
 let midiAccess = null;
 let selectedInput = null;
 let audioContext = null;
@@ -37,6 +39,7 @@ let nextSpawnAt = 0;
 let roundStartAt = 0;
 let songNoteIndex = 0;
 let importedSong = null;
+let backingSource = null;
 let score = 0;
 let streak = 0;
 let hits = 0;
@@ -162,6 +165,32 @@ function stopAllNotes() {
   }
 }
 
+function stopBackingTrack() {
+  if (!backingSource) return;
+
+  try {
+    backingSource.stop();
+  } catch {
+    // The source may already have ended.
+  }
+
+  backingSource.disconnect();
+  backingSource = null;
+}
+
+function startBackingTrack(delaySeconds) {
+  stopBackingTrack();
+  if (!audioContext || !masterGain || !importedSong?.audioBuffer) return;
+
+  backingSource = audioContext.createBufferSource();
+  backingSource.buffer = importedSong.audioBuffer;
+  backingSource.connect(masterGain);
+  backingSource.onended = () => {
+    backingSource = null;
+  };
+  backingSource.start(audioContext.currentTime + delaySeconds);
+}
+
 async function playNote(note, velocity) {
   const audioReady = await ensureAudio();
   if (!audioReady || !audioContext || !masterGain) return;
@@ -230,6 +259,39 @@ function resetGame() {
 
 function isBlackKey(note) {
   return BLACK_KEY_PITCHES.has(note % 12);
+}
+
+function whiteKeysOnly() {
+  return whiteKeysOnlyInput.checked;
+}
+
+function getPlayableNotes() {
+  const { low, high } = getRange();
+  const notes = [];
+
+  for (let note = low; note <= high; note += 1) {
+    if (!whiteKeysOnly() || !isBlackKey(note)) {
+      notes.push(note);
+    }
+  }
+
+  return notes.length ? notes : [low];
+}
+
+function nearestPlayableNote(note) {
+  const playable = getPlayableNotes();
+  let best = playable[0];
+  let bestDistance = Math.abs(note - best);
+
+  for (const candidate of playable) {
+    const distance = Math.abs(note - candidate);
+    if (distance < bestDistance) {
+      best = candidate;
+      bestDistance = distance;
+    }
+  }
+
+  return best;
 }
 
 function getKeyboardLayout() {
@@ -333,8 +395,8 @@ function wrapText(text, maxWidth) {
 }
 
 function randomTargetNote() {
-  const { low, high } = getRange();
-  return low + Math.floor(Math.random() * (high - low + 1));
+  const playable = getPlayableNotes();
+  return playable[Math.floor(Math.random() * playable.length)];
 }
 
 function fitNoteToRange(note) {
@@ -345,10 +407,16 @@ function fitNoteToRange(note) {
   while (fitted > high) fitted -= 12;
 
   if (fitted < low || fitted > high) {
-    return Math.min(high, Math.max(low, fitted));
+    fitted = Math.min(high, Math.max(low, fitted));
   }
 
-  return fitted;
+  return whiteKeysOnly() ? nearestPlayableNote(fitted) : fitted;
+}
+
+function rangeNoteFromUnit(unit) {
+  const playable = getPlayableNotes();
+  const index = Math.round(Math.max(0, Math.min(1, unit)) * (playable.length - 1));
+  return playable[index];
 }
 
 function spawnNote(note = randomTargetNote(), sourceNote = note) {
@@ -365,6 +433,19 @@ function spawnNote(note = randomTargetNote(), sourceNote = note) {
 function recordJudgement(label, color) {
   recentJudgements.unshift({ label, color, createdAt: performance.now() });
   recentJudgements = recentJudgements.slice(0, 5);
+}
+
+function triggerKeyFlash(note, color = "#39d98a", strength = 1) {
+  keyFlashes.push({
+    note,
+    color,
+    strength,
+    createdAt: performance.now(),
+  });
+
+  while (keyFlashes.length > 32) {
+    keyFlashes.shift();
+  }
 }
 
 function readText(data, offset, length) {
@@ -515,6 +596,7 @@ async function importMidiSong(file) {
     importedSong = {
       name: file.name,
       notes,
+      type: "midi",
     };
     setStatus(`Loaded ${file.name}: ${notes.length} notes. Start Round will use the song.`);
     logEvent(`loaded song ${file.name} (${notes.length} notes)`);
@@ -523,6 +605,152 @@ async function importMidiSong(file) {
     midiFileInput.value = "";
     setStatus(`Could not load MIDI: ${error.message}`);
     logEvent(`MIDI import failed: ${error.message}`);
+  }
+}
+
+function analyzeAudioBuffer(buffer) {
+  const channel = buffer.getChannelData(0);
+  const sampleRate = buffer.sampleRate;
+  const frameSize = Math.max(1024, Math.round(sampleRate * 0.045));
+  const hopSize = Math.max(512, Math.round(sampleRate * 0.025));
+  const frames = [];
+  let previousEnergy = 0;
+
+  for (let start = 0; start + frameSize < channel.length; start += hopSize) {
+    let energy = 0;
+    let zeroCrossings = 0;
+    let previousSample = channel[start];
+
+    for (let i = 0; i < frameSize; i += 1) {
+      const sample = channel[start + i];
+      energy += sample * sample;
+      if ((sample >= 0 && previousSample < 0) || (sample < 0 && previousSample >= 0)) {
+        zeroCrossings += 1;
+      }
+      previousSample = sample;
+    }
+
+    energy = Math.sqrt(energy / frameSize);
+    const flux = Math.max(0, energy - previousEnergy);
+    previousEnergy = energy;
+    frames.push({
+      timeMs: (start / sampleRate) * 1000,
+      energy,
+      flux,
+      brightness: zeroCrossings / frameSize,
+    });
+  }
+
+  if (!frames.length) {
+    throw new Error("Audio file is too short to analyze");
+  }
+
+  const averageFlux = frames.reduce((sum, frame) => sum + frame.flux, 0) / frames.length;
+  const averageEnergy = frames.reduce((sum, frame) => sum + frame.energy, 0) / frames.length;
+  const notes = [];
+  let lastNoteAt = -Infinity;
+
+  for (let i = 1; i < frames.length - 1; i += 1) {
+    const frame = frames[i];
+    const isPeak = frame.flux > frames[i - 1].flux && frame.flux >= frames[i + 1].flux;
+    const enoughSpace = frame.timeMs - lastNoteAt >= 230;
+    const strongEnough = frame.flux > averageFlux * 1.45 && frame.energy > averageEnergy * 0.65;
+
+    if (isPeak && enoughSpace && strongEnough) {
+      const detectedNote = estimatePitchMidi(channel, sampleRate, frame.timeMs) ?? rangeNoteFromUnit(Math.min(1, frame.brightness * 14));
+      notes.push({
+        note: detectedNote,
+        sourceNote: detectedNote,
+        timeMs: frame.timeMs,
+        velocity: Math.round(Math.min(127, 55 + frame.energy * 420)),
+      });
+      lastNoteAt = frame.timeMs;
+    }
+  }
+
+  if (!notes.length) {
+    throw new Error("Could not detect enough note moments in that audio file");
+  }
+
+  return notes.slice(0, 700);
+}
+
+function estimatePitchMidi(channel, sampleRate, timeMs) {
+  const windowSize = Math.min(4096, channel.length);
+  const center = Math.round((timeMs / 1000) * sampleRate);
+  const start = Math.max(0, Math.min(channel.length - windowSize, center - Math.floor(windowSize / 2)));
+  const minLag = Math.floor(sampleRate / 1000);
+  const maxLag = Math.min(Math.floor(sampleRate / 80), Math.floor(windowSize / 2));
+  let energy = 0;
+
+  for (let i = 0; i < windowSize; i += 1) {
+    const sample = channel[start + i];
+    energy += sample * sample;
+  }
+
+  if (energy < 0.001) return null;
+
+  let bestLag = 0;
+  let bestCorrelation = 0;
+
+  for (let lag = minLag; lag <= maxLag; lag += 1) {
+    let correlation = 0;
+    for (let i = 0; i < windowSize - lag; i += 1) {
+      correlation += channel[start + i] * channel[start + i + lag];
+    }
+    correlation /= energy;
+
+    if (correlation > bestCorrelation) {
+      bestCorrelation = correlation;
+      bestLag = lag;
+    }
+  }
+
+  if (!bestLag || bestCorrelation < 0.22) return null;
+
+  const frequency = sampleRate / bestLag;
+  if (frequency < 40 || frequency > 1600) return null;
+
+  return Math.max(0, Math.min(127, Math.round(69 + 12 * Math.log2(frequency / 440))));
+}
+
+async function importAudioSong(file) {
+  await ensureAudio();
+  if (!audioContext) {
+    throw new Error("Web Audio is unavailable");
+  }
+
+  const buffer = await audioContext.decodeAudioData(await file.arrayBuffer());
+  const notes = analyzeAudioBuffer(buffer);
+  importedSong = {
+    name: file.name,
+    notes,
+    audioBuffer: buffer,
+    type: "audio",
+  };
+  setStatus(`Generated ${notes.length} notes from ${file.name}. Start Round will play the song.`);
+  logEvent(`generated chart from ${file.name} (${notes.length} notes)`);
+}
+
+async function importSongFile(file) {
+  if (!file) return;
+
+  const isMidi = /\.(mid|midi)$/i.test(file.name) || file.type === "audio/midi";
+  const isAudio = file.type.startsWith("audio/") || /\.(mp3|wav|m4a|aac|ogg)$/i.test(file.name);
+
+  try {
+    if (isMidi) {
+      await importMidiSong(file);
+    } else if (isAudio) {
+      await importAudioSong(file);
+    } else {
+      throw new Error("Use a MIDI file or an audio file like MP3");
+    }
+  } catch (error) {
+    importedSong = null;
+    midiFileInput.value = "";
+    setStatus(`Could not load song: ${error.message}`);
+    logEvent(`song import failed: ${error.message}`);
   }
 }
 
@@ -545,6 +773,7 @@ function judgeNote(note) {
   if (!best || bestDistance > 78) {
     streak = 0;
     misses += 1;
+    triggerKeyFlash(note, "#59a8ff", 0.8);
     recordJudgement("wrong", "#ff5d5d");
     refreshScoreboard();
     return;
@@ -555,6 +784,7 @@ function judgeNote(note) {
   streak += 1;
   const perfect = bestDistance < 28;
   score += perfect ? 120 + streak * 2 : 70 + streak;
+  triggerKeyFlash(note, perfect ? "#39d98a" : "#59a8ff", perfect ? 1.25 : 1);
   recordJudgement(perfect ? "perfect" : "good", perfect ? "#39d98a" : "#ffcc4d");
   refreshScoreboard();
 }
@@ -567,6 +797,7 @@ function handleMidiMessage(event) {
 
   if (isNoteOn) {
     activeNotes.set(note, velocity);
+    triggerKeyFlash(note, "#59a8ff", Math.max(0.7, velocity / 127));
     playNote(note, velocity);
     logEvent("note on", note);
     judgeNote(note);
@@ -652,11 +883,12 @@ async function connectMidi() {
   }
 }
 
-function startRound() {
-  ensureAudio();
+async function startRound() {
+  await ensureAudio();
   resetGame();
   gameRunning = true;
   roundStartAt = performance.now() + 900;
+  startBackingTrack(0.9);
   startButton.disabled = true;
   stopButton.disabled = false;
   const source = importedSong ? importedSong.name : "random notes";
@@ -665,6 +897,7 @@ function startRound() {
 
 function stopRound() {
   gameRunning = false;
+  stopBackingTrack();
   startButton.disabled = !selectedInput;
   stopButton.disabled = true;
   setStatus("Round stopped. Live note display still works.");
@@ -675,6 +908,7 @@ function clearHeldNotes() {
   fallingNotes.length = 0;
   importedSong = null;
   midiFileInput.value = "";
+  stopBackingTrack();
   stopAllNotes();
   updateLiveNotes();
   logEvent("cleared notes and song");
@@ -693,7 +927,8 @@ function drawKeyboardGuide(layout) {
   ctx.font = "14px system-ui";
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
-  ctx.fillText(`Hit line | notes ${layout.low}-${layout.high}`, viewWidth / 2, targetY - 10);
+  const modeLabel = whiteKeysOnly() ? "white keys only" : `notes ${layout.low}-${layout.high}`;
+  ctx.fillText(`Hit line | ${modeLabel}`, viewWidth / 2, targetY - 10);
 }
 
 function drawPianoKeyboard(layout) {
@@ -724,15 +959,16 @@ function drawPianoKeyboard(layout) {
 
   for (const key of layout.blackKeys) {
     const active = activeNotes.has(key.note);
-    ctx.fillStyle = active ? "#ffcc4d" : "#171717";
-    ctx.strokeStyle = active ? "#6f5011" : "#030303";
+    const disabled = whiteKeysOnly();
+    ctx.fillStyle = active ? "#ffcc4d" : disabled ? "#0d0f0f" : "#171717";
+    ctx.strokeStyle = active ? "#6f5011" : disabled ? "#242929" : "#030303";
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.roundRect(key.x, key.y, key.width, key.height, 5);
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = active ? "#1b1404" : "#f4f0e9";
+    ctx.fillStyle = active ? "#1b1404" : disabled ? "#5f6868" : "#f4f0e9";
     ctx.font = "bold 12px system-ui";
     ctx.textAlign = "center";
     ctx.textBaseline = "alphabetic";
@@ -821,6 +1057,58 @@ function drawActiveKeys(layout) {
   }
 }
 
+function drawKeyFlashes(layout) {
+  const now = performance.now();
+
+  for (let i = keyFlashes.length - 1; i >= 0; i -= 1) {
+    const flash = keyFlashes[i];
+    const age = now - flash.createdAt;
+    if (age > 650) {
+      keyFlashes.splice(i, 1);
+      continue;
+    }
+
+    const key = layout.keys.get(flash.note);
+    if (!key) continue;
+
+    const progress = age / 650;
+    const alpha = 1 - progress;
+    const expansion = (10 + 28 * progress) * flash.strength;
+    const x = key.x - expansion / 2;
+    const y = key.y - expansion / 2;
+    const width = key.width + expansion;
+    const height = key.height + expansion * 0.75;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = flash.color;
+    ctx.lineWidth = Math.max(2, 8 * alpha * flash.strength);
+    ctx.shadowColor = flash.color;
+    ctx.shadowBlur = 22 * alpha;
+    ctx.beginPath();
+    ctx.roundRect(x, y, width, height, 8);
+    ctx.stroke();
+
+    ctx.globalAlpha = alpha * 0.24;
+    ctx.fillStyle = flash.color;
+    ctx.beginPath();
+    ctx.roundRect(x, y, width, height, 8);
+    ctx.fill();
+
+    const burstY = key.kind === "black" ? key.y + key.height + 16 : key.y - 16;
+    for (let dot = 0; dot < 6; dot += 1) {
+      const angle = (Math.PI * 2 * dot) / 6;
+      const radius = (8 + 28 * progress) * flash.strength;
+      ctx.globalAlpha = alpha * 0.85;
+      ctx.beginPath();
+      ctx.arc(key.centerX + Math.cos(angle) * radius, burstY + Math.sin(angle) * radius * 0.45, 3.5 * alpha + 1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+}
+
 function drawJudgements() {
   const now = performance.now();
   ctx.textAlign = "center";
@@ -874,6 +1162,7 @@ function drawFrame(now) {
   drawKeyboardGuide(layout);
   drawFallingNotes(deltaSeconds, layout);
   drawPianoKeyboard(layout);
+  drawKeyFlashes(layout);
   drawActiveKeys(layout);
   drawJudgements();
   drawIdleMessage();
@@ -892,7 +1181,11 @@ difficultySelect.addEventListener("change", () => {
   fallingNotes.length = 0;
   setStatus(`Mode changed to ${difficultySelect.selectedOptions[0].text}.`);
 });
-midiFileInput.addEventListener("change", () => importMidiSong(midiFileInput.files[0]));
+whiteKeysOnlyInput.addEventListener("change", () => {
+  fallingNotes.length = 0;
+  setStatus(whiteKeysOnly() ? "White keys only enabled." : "Black key targets enabled.");
+});
+midiFileInput.addEventListener("change", () => importSongFile(midiFileInput.files[0]));
 
 syncRangeInputs();
 updateLiveNotes();
@@ -901,6 +1194,7 @@ animationFrame = requestAnimationFrame(drawFrame);
 
 window.addEventListener("beforeunload", () => {
   cancelAnimationFrame(animationFrame);
+  stopBackingTrack();
   stopAllNotes();
   detachSelectedInput();
 });

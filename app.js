@@ -940,22 +940,13 @@ function removeCurrentBoardStreet(index) {
   return true;
 }
 
-function copyCurrentFlop() {
-  const text = boardCode(state.history[state.index]);
-  if (!navigator.clipboard) return;
-  navigator.clipboard.writeText(text).then(() => {
-    els.copyFlop.title = "Copied";
-    window.setTimeout(() => {
-      els.copyFlop.title = "Copy board";
-    }, 900);
-  });
-}
-
 function bootBrowserApp() {
   els = {
     previousFlop: document.querySelector("#previous-flop"),
     nextFlop: document.querySelector("#next-flop"),
-    copyFlop: document.querySelector("#copy-flop"),
+    showHandRankings: document.querySelector("#show-hand-rankings"),
+    handRankingsDialog: document.querySelector("#hand-rankings-dialog"),
+    closeHandRankings: document.querySelector("#close-hand-rankings"),
     flopCards: document.querySelector("#flop-cards"),
     nutCombo: document.querySelector("#nut-combo"),
     nutName: document.querySelector("#nut-name"),
@@ -1046,7 +1037,28 @@ function bootBrowserApp() {
       renderCurrentFlop();
     }
   });
-  els.copyFlop.addEventListener("click", copyCurrentFlop);
+  els.showHandRankings.addEventListener("click", () => {
+    if (typeof els.handRankingsDialog.showModal === "function") {
+      els.handRankingsDialog.showModal();
+    } else {
+      els.handRankingsDialog.setAttribute("open", "");
+    }
+  });
+  els.closeHandRankings.addEventListener("click", () => {
+    if (typeof els.handRankingsDialog.close === "function") {
+      els.handRankingsDialog.close();
+    } else {
+      els.handRankingsDialog.removeAttribute("open");
+    }
+  });
+  els.handRankingsDialog.addEventListener("click", (event) => {
+    if (event.target !== els.handRankingsDialog) return;
+    if (typeof els.handRankingsDialog.close === "function") {
+      els.handRankingsDialog.close();
+    } else {
+      els.handRankingsDialog.removeAttribute("open");
+    }
+  });
 
   window.addEventListener("keydown", (event) => {
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;

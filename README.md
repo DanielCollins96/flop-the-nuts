@@ -10,6 +10,10 @@ Run the evaluator smoke tests with:
 
 ```sh
 npm test
+```
+
+Deployment script
+```sh
 npm run deploy
 ```
 

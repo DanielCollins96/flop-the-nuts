@@ -3,8 +3,77 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Flop the Nuts</title>
+    <title>Flop the Nuts | Texas Hold'em Flop Trainer & Nut Hand Calculator</title>
+    <meta
+      name="description"
+      content="Practice Texas Hold'em flop strategy with Flop the Nuts, an interactive poker trainer that ranks every legal two-card hand, shows the current nuts, board texture, redraws, and estimated equity."
+    />
+    <meta
+      name="keywords"
+      content="flop the nuts, poker flop trainer, Texas Hold'em trainer, poker hand calculator, nut hand calculator, holdem equity, flop strategy"
+    />
+    <meta name="robots" content="index, follow" />
+    <meta name="application-name" content="Flop the Nuts" />
+    <meta name="theme-color" content="#071013" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Flop the Nuts" />
+    <meta property="og:title" content="Flop the Nuts | Texas Hold'em Flop Trainer" />
+    <meta
+      property="og:description"
+      content="Analyze Texas Hold'em flops, identify the nuts, compare top hand tiers, and estimate showdown equity against up to eight opponents."
+    />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Flop the Nuts | Texas Hold'em Flop Trainer" />
+    <meta
+      name="twitter:description"
+      content="Interactive poker flop trainer for finding the nuts, ranking hole-card combos, and estimating Hold'em equity."
+    />
     <link rel="stylesheet" href="./styles.css" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Flop the Nuts",
+        "applicationCategory": "GameApplication",
+        "operatingSystem": "Any",
+        "description": "An interactive Texas Hold'em flop trainer that ranks legal two-card hands, identifies the current nuts, labels board texture, and estimates showdown equity.",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        "featureList": [
+          "Texas Hold'em flop, turn, and river board analysis",
+          "Nut hand and top hand tier ranking",
+          "Hole-card equity estimates against up to eight opponents",
+          "Board texture and redraw tagging"
+        ]
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "What does Flop the Nuts calculate?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Flop the Nuts ranks every legal two-card Texas Hold'em hand for the current board, identifies the nut hand, groups matching hand tiers, and estimates showdown equity."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can I choose a custom poker flop?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. You can click board cards to replace them, add turn and river cards, and choose your own two-card hand for equity estimates."
+            }
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
     <main class="app-shell">
@@ -32,8 +101,15 @@
               <span aria-hidden="true">‹</span>
             </button>
             <button id="next-flop" class="primary-button" type="button">New flop</button>
-            <button id="copy-flop" class="icon-button" type="button" title="Copy board" aria-label="Copy board">
-              <span aria-hidden="true">⧉</span>
+            <button
+              id="show-hand-rankings"
+              class="icon-button"
+              type="button"
+              title="Show hand rankings"
+              aria-label="Show poker hand rankings"
+              aria-haspopup="dialog"
+            >
+              <span aria-hidden="true">&#9776;</span>
             </button>
           </div>
         </header>
@@ -90,6 +166,148 @@
         <div id="ranking-list" class="ranking-list"></div>
       </aside>
     </main>
+
+    <dialog id="hand-rankings-dialog" class="hand-rankings-dialog" aria-labelledby="hand-rankings-title">
+      <div class="dialog-head">
+        <div>
+          <p class="eyebrow">Poker hand order</p>
+          <h2 id="hand-rankings-title">Hand rankings</h2>
+        </div>
+        <button id="close-hand-rankings" class="icon-button" type="button" aria-label="Close hand rankings">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <ol class="hand-rankings-list">
+        <li>
+          <span class="ranking-number">1</span>
+          <div>
+            <strong>Royal flush</strong>
+            <span>A-K-Q-J-10, all the same suit.</span>
+          </div>
+          <span class="mini-hand" aria-hidden="true">
+            <span class="mini-card red">A&hearts;</span><span class="mini-card red">K&hearts;</span><span class="mini-card red">Q&hearts;</span><span class="mini-card red">J&hearts;</span><span class="mini-card red">10&hearts;</span>
+          </span>
+        </li>
+        <li>
+          <span class="ranking-number">2</span>
+          <div>
+            <strong>Straight flush</strong>
+            <span>Five consecutive cards, all the same suit.</span>
+          </div>
+          <span class="mini-hand" aria-hidden="true">
+            <span class="mini-card">9&spades;</span><span class="mini-card">8&spades;</span><span class="mini-card">7&spades;</span><span class="mini-card">6&spades;</span><span class="mini-card">5&spades;</span>
+          </span>
+        </li>
+        <li>
+          <span class="ranking-number">3</span>
+          <div>
+            <strong>Four of a kind</strong>
+            <span>Four cards of one rank plus a kicker.</span>
+          </div>
+          <span class="mini-hand" aria-hidden="true">
+            <span class="mini-card red">Q&hearts;</span><span class="mini-card red">Q&diams;</span><span class="mini-card">Q&clubs;</span><span class="mini-card">Q&spades;</span><span class="mini-card">7&clubs;</span>
+          </span>
+        </li>
+        <li>
+          <span class="ranking-number">4</span>
+          <div>
+            <strong>Full house</strong>
+            <span>Three of a kind with a separate pair.</span>
+          </div>
+          <span class="mini-hand" aria-hidden="true">
+            <span class="mini-card red">J&hearts;</span><span class="mini-card red">J&diams;</span><span class="mini-card">J&clubs;</span><span class="mini-card">8&spades;</span><span class="mini-card red">8&hearts;</span>
+          </span>
+        </li>
+        <li>
+          <span class="ranking-number">5</span>
+          <div>
+            <strong>Flush</strong>
+            <span>Five cards of the same suit, not consecutive.</span>
+          </div>
+          <span class="mini-hand" aria-hidden="true">
+            <span class="mini-card red">A&diams;</span><span class="mini-card red">J&diams;</span><span class="mini-card red">8&diams;</span><span class="mini-card red">5&diams;</span><span class="mini-card red">2&diams;</span>
+          </span>
+        </li>
+        <li>
+          <span class="ranking-number">6</span>
+          <div>
+            <strong>Straight</strong>
+            <span>Five consecutive cards in mixed suits.</span>
+          </div>
+          <span class="mini-hand" aria-hidden="true">
+            <span class="mini-card">10&clubs;</span><span class="mini-card red">9&hearts;</span><span class="mini-card">8&spades;</span><span class="mini-card red">7&diams;</span><span class="mini-card">6&clubs;</span>
+          </span>
+        </li>
+        <li>
+          <span class="ranking-number">7</span>
+          <div>
+            <strong>Three of a kind</strong>
+            <span>Three cards of one rank plus two kickers.</span>
+          </div>
+          <span class="mini-hand" aria-hidden="true">
+            <span class="mini-card red">5&hearts;</span><span class="mini-card red">5&diams;</span><span class="mini-card">5&clubs;</span><span class="mini-card">K&spades;</span><span class="mini-card">2&clubs;</span>
+          </span>
+        </li>
+        <li>
+          <span class="ranking-number">8</span>
+          <div>
+            <strong>Two pair</strong>
+            <span>Two cards of one rank and two cards of another.</span>
+          </div>
+          <span class="mini-hand" aria-hidden="true">
+            <span class="mini-card red">A&hearts;</span><span class="mini-card">A&clubs;</span><span class="mini-card red">4&diams;</span><span class="mini-card">4&spades;</span><span class="mini-card">9&clubs;</span>
+          </span>
+        </li>
+        <li>
+          <span class="ranking-number">9</span>
+          <div>
+            <strong>One pair</strong>
+            <span>Two cards of one rank plus three kickers.</span>
+          </div>
+          <span class="mini-hand" aria-hidden="true">
+            <span class="mini-card red">K&hearts;</span><span class="mini-card">K&clubs;</span><span class="mini-card red">10&diams;</span><span class="mini-card">6&spades;</span><span class="mini-card">3&clubs;</span>
+          </span>
+        </li>
+        <li>
+          <span class="ranking-number">10</span>
+          <div>
+            <strong>High card</strong>
+            <span>No pair or better. Highest cards decide the hand.</span>
+          </div>
+          <span class="mini-hand" aria-hidden="true">
+            <span class="mini-card">A&clubs;</span><span class="mini-card red">J&diams;</span><span class="mini-card">8&spades;</span><span class="mini-card red">6&hearts;</span><span class="mini-card">2&clubs;</span>
+          </span>
+        </li>
+      </ol>
+    </dialog>
+
+    <section class="seo-content" aria-labelledby="about-title">
+      <div class="seo-content-inner">
+        <h2 id="about-title">Texas Hold'em Flop Trainer</h2>
+        <p>
+          Flop the Nuts is an interactive poker hand calculator for studying Texas Hold'em boards.
+          Generate a random flop or build a custom board to see the current nuts, the strongest
+          two-card hand tiers, combo counts, board texture, flush draws, straight draws, and
+          estimated showdown equity.
+        </p>
+        <p>
+          Use it to practice flop strategy, compare made hands with redraws, and test how your
+          hole cards perform against one to eight random opponents on the flop, turn, or river.
+        </p>
+        <div class="faq-list">
+          <h3>What does Flop the Nuts calculate?</h3>
+          <p>
+            Flop the Nuts ranks every legal two-card Texas Hold'em hand for the current board,
+            identifies the nut hand, groups matching hand tiers, and estimates showdown equity.
+          </p>
+          <h3>Can I choose a custom poker flop?</h3>
+          <p>
+            Yes. You can click board cards to replace them, add turn and river cards, and choose
+            your own two-card hand for equity estimates.
+          </p>
+        </div>
+      </div>
+    </section>
 
     <script src="./app.js"></script>
     <!-- Cloudflare Web Analytics --><script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "fb2ff1fb20754bd59bec55eebc389849"}'></script><!-- End Cloudflare Web Analytics -->

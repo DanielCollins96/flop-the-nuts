@@ -678,6 +678,145 @@ h2 {
   border-color: rgba(217, 170, 78, 0.55);
 }
 
+.hand-rankings-dialog {
+  width: min(920px, calc(100vw - 24px));
+  max-height: min(780px, calc(100vh - 24px));
+  padding: 0;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid rgba(217, 170, 78, 0.55);
+  box-shadow: var(--shadow);
+}
+
+.hand-rankings-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.68);
+}
+
+.dialog-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  background: rgba(13, 23, 27, 0.98);
+  border-bottom: 1px solid var(--line);
+}
+
+.hand-rankings-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 10px;
+  list-style: none;
+}
+
+.hand-rankings-list li {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 8px 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+}
+
+.hand-rankings-list li:first-child {
+  border-color: rgba(217, 170, 78, 0.75);
+  background: linear-gradient(180deg, rgba(217, 170, 78, 0.12), rgba(18, 31, 36, 0.96));
+}
+
+.ranking-number {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  color: #111;
+  background: var(--gold);
+  font-weight: 950;
+}
+
+.hand-rankings-list li > div > strong,
+.hand-rankings-list li > div > span {
+  display: block;
+}
+
+.hand-rankings-list li > div > strong {
+  font-size: 0.96rem;
+  line-height: 1.2;
+}
+
+.hand-rankings-list li > div > span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.3;
+}
+
+.mini-hand {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  justify-content: flex-end;
+  min-width: max-content;
+}
+
+.mini-card {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 42px;
+  display: inline-grid;
+  place-items: center;
+  color: var(--black-card);
+  background: var(--card);
+  border: 1px solid rgba(0, 0, 0, 0.22);
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.mini-card.red {
+  color: var(--red);
+}
+
+.seo-content {
+  padding: 40px 16px 56px;
+}
+
+.seo-content-inner {
+  width: min(980px, 100%);
+  margin: 0 auto;
+  color: rgba(239, 247, 244, 0.82);
+}
+
+.seo-content h2 {
+  margin-bottom: 12px;
+  font-size: 1.6rem;
+}
+
+.seo-content p {
+  margin: 0 0 12px;
+  max-width: 78ch;
+  color: rgba(239, 247, 244, 0.74);
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.faq-list {
+  margin-top: 24px;
+}
+
+.faq-list h3 {
+  margin: 18px 0 6px;
+  color: var(--text);
+  font-size: 1.05rem;
+  line-height: 1.25;
+}
+
 @media (max-width: 1040px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -760,6 +899,14 @@ h2 {
     justify-content: start;
     text-align: left;
   }
+
+  .hand-rankings-list li {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .mini-hand {
+    grid-column: auto;
+  }
 }
 
 @media (max-width: 520px) {
@@ -782,5 +929,32 @@ h2 {
 
   .card-picker-grid {
     grid-template-columns: repeat(6, minmax(30px, 1fr));
+  }
+
+  .hand-rankings-dialog {
+    width: calc(100vw - 12px);
+    max-height: calc(100vh - 12px);
+  }
+
+  .hand-rankings-list {
+    padding: 8px;
+  }
+
+  .hand-rankings-list li {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .mini-hand {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    min-width: 0;
+  }
+
+  .mini-card {
+    width: 29px;
+    height: 42px;
+    font-size: 0.64rem;
   }
 }

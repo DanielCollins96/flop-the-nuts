@@ -1,6 +1,6 @@
 await import("./app.js");
 
-const { evaluateBest, evaluateFive, rankAllHands, buildTiers, createDeck, estimateTierWinRates, sortCombosByRedraws } = globalThis.FlopTheNuts;
+const { evaluateBest, evaluateFive, rankAllHands, buildTiers, createDeck, estimateTierWinRates, normalizeTierWinRates, sortCombosByRedraws } = globalThis.FlopTheNuts;
 
 const card = (rank, suit) => {
   const values = { A: 14, K: 13, Q: 12, J: 11, 10: 10, 9: 9, 8: 8, 7: 7, 6: 6, 5: 5, 4: 4, 3: 3, 2: 2 };
@@ -41,6 +41,14 @@ if (tiers.length <= 11 || totalCombos !== 1176) {
 const winRates = estimateTierWinRates(tiers.slice(0, 3), board, 2);
 if (winRates.size !== 3 || [...winRates.values()].some((rate) => rate < 0 || rate > 100)) {
   throw new Error("expected win estimates to be valid percentages");
+}
+const normalizedWinRates = normalizeTierWinRates(tiers.slice(0, 3), new Map([
+  [tiers[0].key, 88],
+  [tiers[1].key, 91],
+  [tiers[2].key, 85],
+]));
+if (normalizedWinRates.get(tiers[0].key) !== 88 || normalizedWinRates.get(tiers[1].key) !== 88 || normalizedWinRates.get(tiers[2].key) !== 85) {
+  throw new Error("expected normalized win estimates not to increase down the tier list");
 }
 
 const redrawBoard = ["9h", "7h", "5s"].map((code) => deck.find((deckCard) => deckCard.code === code));

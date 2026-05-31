@@ -282,7 +282,7 @@ function cardHtml(card, size = "") {
 
 function comboHtml(combo, hidden = false, equityLift = null) {
   const tags = currentBoard ? comboRedrawTags(combo, currentBoard) : [];
-  const liftText = equityLift !== null && equityLift >= 0.05 ? ` ${formatSignedPointValue(equityLift)}` : "";
+  const liftText = equityLift !== null ? ` ${formatSignedPointValue(equityLift)}` : "";
   const tagText = tags.map((tag, index) => `${tag}${index === 0 ? liftText : ""}`);
 
   return `
@@ -344,13 +344,13 @@ function renderCurrentFlop() {
   const opponentCount = Number(els.opponentCount.value);
   const visibleTierCount = Math.min(tiers.length, 24);
   const visibleTiers = tiers.slice(0, visibleTierCount);
-  const winRates = estimateTierWinRates(visibleTiers, board, opponentCount);
+  const winRates = normalizeTierWinRates(visibleTiers, estimateTierWinRates(visibleTiers, board, opponentCount));
   const nutsWinRate = winRates.get(nuts.key);
   const displayTiers = visibleTiers.map((tier) => ({
     ...tier,
     combos: sortCombosByRedraws(tier.combos, board),
   }));
-  const comboLiftTargets = visibleComboKeys(displayTiers);
+  const comboLiftTargets = visibleComboKeys(displayTiers, board);
   const comboLift = estimateRedrawComboLift(displayTiers, board, opponentCount, winRates, comboLiftTargets);
 
   els.flopCards.innerHTML = board.map((card) => cardHtml(card)).join("");
@@ -365,16 +365,32 @@ function renderCurrentFlop() {
   els.previousFlop.disabled = state.index <= 0;
 }
 
-function visibleComboKeys(tiers) {
+function visibleComboKeys(tiers, board) {
   const keys = new Set();
 
   for (const tier of tiers) {
-    for (const combo of tier.combos.slice(0, 4)) {
-      keys.add(comboKey(combo));
+    for (const combo of tier.combos) {
+      if (comboRedrawTags(combo, board).length > 0) {
+        keys.add(comboKey(combo));
+      }
     }
   }
 
   return keys;
+}
+
+function normalizeTierWinRates(tiers, winRates) {
+  const normalized = new Map();
+  let bestAllowed = Infinity;
+
+  for (const tier of tiers) {
+    const rate = winRates.get(tier.key);
+    const displayRate = Math.min(rate, bestAllowed);
+    normalized.set(tier.key, displayRate);
+    bestAllowed = displayRate;
+  }
+
+  return normalized;
 }
 
 function sortCombosByRedraws(combos, board) {
@@ -476,7 +492,7 @@ function estimateTierWinRates(tiers, board, opponentCount) {
 }
 
 function cachedTierWinRate(tier, board, opponentCount, samples) {
-  const key = `${boardCode(board)}:${tier.key}:${opponentCount}`;
+  const key = `${boardCode(board)}:${tier.key}:${opponentCount}:${samples}`;
   if (!tierWinRateCache.has(key)) {
     tierWinRateCache.set(key, estimateTierWinRate(tier, board, opponentCount, samples, key));
   }
@@ -485,7 +501,7 @@ function cachedTierWinRate(tier, board, opponentCount, samples) {
 }
 
 function equitySamplesFor(opponentCount) {
-  return Math.max(60, 140 - opponentCount * 10);
+  return Math.max(180, 440 - opponentCount * 20);
 }
 
 function estimateRedrawComboLift(tiers, board, opponentCount, tierWinRates, targetComboKeys = null) {
@@ -523,7 +539,7 @@ function estimateRedrawComboLift(tiers, board, opponentCount, tierWinRates, targ
 }
 
 function cachedComboWinRate(combo, board, opponentCount, samples) {
-  const key = `${boardCode(board)}:${comboKey(combo)}:${opponentCount}:combo`;
+  const key = `${boardCode(board)}:${comboKey(combo)}:${opponentCount}:${samples}:combo`;
   if (!comboWinRateCache.has(key)) {
     comboWinRateCache.set(key, estimateComboWinRate(combo, board, opponentCount, samples, key));
   }
@@ -730,7 +746,9 @@ globalThis.FlopTheNuts = {
   estimateRedrawComboLift,
   estimateTierWinRate,
   estimateTierWinRates,
+  comboRedrawTags,
   getHoleCombos,
+  normalizeTierWinRates,
   rankAllHands,
   sortCombosByRedraws,
   formatPercentValue,

@@ -35,6 +35,8 @@ const CATEGORY_NAMES = [
 
 const BOARD_SLOT_COUNT = 5;
 const STREET_LABELS = ["Flop", "Flop", "Flop", "Turn", "River"];
+const INITIAL_VISIBLE_TIER_COUNT = 24;
+const TIER_PAGE_SIZE = 24;
 const rankMeta = new Map(RANKS.map(([symbol, value, single, plural]) => [value, { symbol, single, plural }]));
 const state = {
   history: [],
@@ -42,6 +44,7 @@ const state = {
   editingBoardIndex: null,
   heroCards: [],
   editingHeroIndex: null,
+  visibleTierCount: INITIAL_VISIBLE_TIER_COUNT,
 };
 
 let els = null;
@@ -423,7 +426,7 @@ function renderCurrentFlop() {
   const { key: boardKey, tiers, totalCombos } = analysis;
   const nuts = tiers[0];
   const opponentCount = Number(els.opponentCount.value);
-  const visibleTierCount = Math.min(tiers.length, 24);
+  const visibleTierCount = Math.min(tiers.length, state.visibleTierCount);
   const visibleTiers = tiers.slice(0, visibleTierCount);
   const winRates = normalizeTierWinRates(visibleTiers, estimateTierWinRates(visibleTiers, board, opponentCount));
   const nutsWinRate = winRates.get(nuts.key);
@@ -444,7 +447,20 @@ function renderCurrentFlop() {
   els.nutName.textContent = `${CATEGORY_NAMES[nuts.evaluation.category]}: ${nuts.handName}`;
   els.nutMeta.textContent = `${formatPercentValue(nutsWinRate)} win est. vs ${opponentCount} opponent${opponentCount === 1 ? "" : "s"} · ${formatPercentage(nuts.combos.length, totalCombos)} deal frequency`;
   els.rankingList.innerHTML = displayTiers.map((tier, index) => tierHtml(tier, index, totalCombos, winRates.get(tier.key), comboLift)).join("");
+  renderRankingControls(visibleTierCount, tiers.length);
+  updateRankingScrollTopButton();
   els.previousFlop.disabled = state.index <= 0;
+}
+
+function renderRankingControls(visibleTierCount, totalTierCount) {
+  const hiddenTierCount = totalTierCount - visibleTierCount;
+  els.rankingShown.textContent = `${visibleTierCount.toLocaleString()} of ${totalTierCount.toLocaleString()} tiers`;
+  els.showMoreRankings.hidden = hiddenTierCount <= 0;
+  els.showMoreRankings.textContent = `Show ${Math.min(TIER_PAGE_SIZE, hiddenTierCount)} more`;
+}
+
+function updateRankingScrollTopButton() {
+  els.rankingScrollTop.hidden = els.rankingList.scrollTop < 180;
 }
 
 function renderHeroEditor(board, analysis) {
@@ -955,6 +971,9 @@ function bootBrowserApp() {
     tierCount: document.querySelector("#tier-count"),
     boardTexture: document.querySelector("#board-texture"),
     rankingList: document.querySelector("#ranking-list"),
+    rankingShown: document.querySelector("#ranking-shown"),
+    showMoreRankings: document.querySelector("#show-more-rankings"),
+    rankingScrollTop: document.querySelector("#ranking-scroll-top"),
     flopCode: document.querySelector("#flop-code"),
     opponentCount: document.querySelector("#opponent-count"),
     cardPicker: document.querySelector("#card-picker"),
@@ -1036,6 +1055,14 @@ function bootBrowserApp() {
       clearHeroCardsBlockedByBoard(state.history[state.index]);
       renderCurrentFlop();
     }
+  });
+  els.showMoreRankings.addEventListener("click", () => {
+    state.visibleTierCount += TIER_PAGE_SIZE;
+    renderCurrentFlop();
+  });
+  els.rankingList.addEventListener("scroll", updateRankingScrollTopButton);
+  els.rankingScrollTop.addEventListener("click", () => {
+    els.rankingList.scrollTo({ top: 0, behavior: "smooth" });
   });
   els.showHandRankings.addEventListener("click", () => {
     if (typeof els.handRankingsDialog.showModal === "function") {

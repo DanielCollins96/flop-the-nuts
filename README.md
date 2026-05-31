@@ -11,3 +11,5 @@ Run the evaluator smoke tests with:
 ```sh
 npm test
 ```
+
+![Flop the Nuts](image.png)

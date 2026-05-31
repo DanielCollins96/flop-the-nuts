@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node ./test-evaluator.js"
+    "test": "node ./test-evaluator.js",
+    "deploy": "wrangler pages deploy . --project-name flop-the-nuts-wrangler --branch main"
   }
 }

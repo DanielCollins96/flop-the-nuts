@@ -32,7 +32,7 @@
               <span aria-hidden="true">‹</span>
             </button>
             <button id="next-flop" class="primary-button" type="button">New flop</button>
-            <button id="copy-flop" class="icon-button" type="button" title="Copy flop" aria-label="Copy flop">
+            <button id="copy-flop" class="icon-button" type="button" title="Copy board" aria-label="Copy board">
               <span aria-hidden="true">⧉</span>
             </button>
           </div>
@@ -40,8 +40,9 @@
 
         <div class="felt">
           <div class="board-zone">
-            <p class="zone-label">Flop</p>
+            <p class="zone-label">Board</p>
             <div id="flop-cards" class="card-row board-cards" aria-live="polite"></div>
+            <div id="card-picker" class="card-picker" hidden></div>
           </div>
 
           <div class="nut-readout" aria-live="polite">
@@ -52,7 +53,7 @@
           </div>
         </div>
 
-        <section class="stats-grid" aria-label="Current flop summary">
+        <section class="stats-grid" aria-label="Current board summary">
           <div>
             <span>Combos</span>
             <strong id="combo-count">0</strong>

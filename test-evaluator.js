@@ -1,6 +1,6 @@
 await import("./app.js");
 
-const { evaluateBest, evaluateFive, rankAllHands, buildTiers, createDeck, estimateTierWinRates, normalizeTierWinRates, sortCombosByRedraws } = globalThis.FlopTheNuts;
+const { evaluateBest, evaluateFive, rankAllHands, buildTiers, createDeck, estimateTierWinRates, normalizeTierWinRates, removeBoardStreet, replaceCardInBoard, sortCombosByRedraws } = globalThis.FlopTheNuts;
 
 const card = (rank, suit) => {
   const values = { A: 14, K: 13, Q: 12, J: 11, 10: 10, 9: 9, 8: 8, 7: 7, 6: 6, 5: 5, 4: 4, 3: 3, 2: 2 };
@@ -33,10 +33,44 @@ assertBestScore("seven-card best full house", [card("A", "s"), card("A", "h"), c
 
 const deck = createDeck();
 const board = ["Qh", "Jc", "10d"].map((code) => deck.find((deckCard) => deckCard.code === code));
+const editedBoard = replaceCardInBoard(board, 1, "9s");
+if (!editedBoard || editedBoard.map((boardCard) => boardCard.code).join(" ") !== "Qh 10d 9s") {
+  throw new Error("expected flop card replacement to update and sort the board");
+}
+if (replaceCardInBoard(board, 1, "Qh") !== false) {
+  throw new Error("expected flop card replacement to reject duplicate board cards");
+}
+if (replaceCardInBoard(board, 4, "2s") !== false) {
+  throw new Error("expected river replacement to reject skipping the turn");
+}
+const turnBoard = replaceCardInBoard(board, 3, "2s");
+if (!turnBoard || turnBoard.map((boardCard) => boardCard.code).join(" ") !== "Qh Jc 10d 2s") {
+  throw new Error("expected turn card replacement to append after the flop");
+}
+const riverBoard = replaceCardInBoard(turnBoard, 4, "3s");
+if (!riverBoard || riverBoard.map((boardCard) => boardCard.code).join(" ") !== "Qh Jc 10d 2s 3s") {
+  throw new Error("expected river card replacement to append after the turn");
+}
+const riverRemoved = removeBoardStreet(riverBoard, 4);
+if (!riverRemoved || riverRemoved.map((boardCard) => boardCard.code).join(" ") !== "Qh Jc 10d 2s") {
+  throw new Error("expected river removal to leave the turn board");
+}
+const turnRemoved = removeBoardStreet(riverBoard, 3);
+if (!turnRemoved || turnRemoved.map((boardCard) => boardCard.code).join(" ") !== "Qh Jc 10d") {
+  throw new Error("expected turn removal to remove turn and river");
+}
+if (removeBoardStreet(riverBoard, 2) !== false) {
+  throw new Error("expected flop cards not to be removable");
+}
 const tiers = buildTiers(rankAllHands(board));
 const totalCombos = tiers.reduce((sum, tier) => sum + tier.combos.length, 0);
 if (tiers.length <= 11 || totalCombos !== 1176) {
   throw new Error(`expected full tier set to cover 1,176 combos, got ${tiers.length} tiers and ${totalCombos} combos`);
+}
+const turnCombos = rankAllHands(turnBoard).length;
+const riverCombos = rankAllHands(riverBoard).length;
+if (turnCombos !== 1128 || riverCombos !== 1081) {
+  throw new Error(`expected turn/river combo counts to be 1,128 and 1,081, got ${turnCombos} and ${riverCombos}`);
 }
 const winRates = estimateTierWinRates(tiers.slice(0, 3), board, 2);
 if (winRates.size !== 3 || [...winRates.values()].some((rate) => rate < 0 || rate > 100)) {

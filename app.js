@@ -33,10 +33,13 @@ const CATEGORY_NAMES = [
   "Straight flush",
 ];
 
+const BOARD_SLOT_COUNT = 5;
+const STREET_LABELS = ["Flop", "Flop", "Flop", "Turn", "River"];
 const rankMeta = new Map(RANKS.map(([symbol, value, single, plural]) => [value, { symbol, single, plural }]));
 const state = {
   history: [],
   index: -1,
+  editingBoardIndex: null,
 };
 
 let els = null;
@@ -74,6 +77,10 @@ function drawRandomFlop() {
 function sortCards(cards) {
   const suitOrder = new Map(SUITS.map((suit, index) => [suit.id, index]));
   return [...cards].sort((a, b) => b.value - a.value || suitOrder.get(a.suit) - suitOrder.get(b.suit));
+}
+
+function normalizeCommunityBoard(board) {
+  return [...sortCards(board.slice(0, 3)), ...board.slice(3)];
 }
 
 function getRemainingCards(board) {
@@ -202,7 +209,7 @@ function compareCardsForDisplay(a, b) {
 function rankAllHands(board) {
   return getHoleCombos(board)
     .map((hole) => {
-      const evaluation = evaluateFive([...board, ...hole]);
+      const evaluation = evaluateBest([...board, ...hole]);
       return {
         hole,
         evaluation,
@@ -280,6 +287,49 @@ function cardHtml(card, size = "") {
   `;
 }
 
+function boardCardHtml(card, index, selected = false) {
+  return `
+    <button
+      class="board-card-button${selected ? " selected" : ""}"
+      type="button"
+      data-board-index="${index}"
+      aria-label="Change ${STREET_LABELS[index]} card: ${card.rank} of ${card.suitName}"
+      aria-pressed="${selected}"
+    >
+      ${cardHtml(card)}
+    </button>
+  `;
+}
+
+function boardPlaceholderHtml(index, selected = false, disabled = false) {
+  return `
+    <button
+      class="board-card-button board-card-placeholder${selected ? " selected" : ""}"
+      type="button"
+      data-board-index="${index}"
+      ${disabled ? "disabled" : ""}
+      aria-label="${disabled ? "Add turn before river" : `Choose ${STREET_LABELS[index]} card`}"
+      aria-pressed="${selected}"
+    >
+      <span>${STREET_LABELS[index]}</span>
+    </button>
+  `;
+}
+
+function cardOptionHtml(card, blocked = false, selected = false) {
+  return `
+    <button
+      class="card-option${selected ? " selected" : ""}"
+      type="button"
+      data-card-code="${card.code}"
+      ${blocked ? "disabled" : ""}
+      aria-label="${blocked ? "Unavailable: " : "Use "}${card.rank} of ${card.suitName}"
+    >
+      ${cardHtml(card, "small")}
+    </button>
+  `;
+}
+
 function comboHtml(combo, hidden = false, equityLift = null) {
   const tags = currentBoard ? comboRedrawTags(combo, currentBoard) : [];
   const liftText = equityLift !== null ? ` ${formatSignedPointValue(equityLift)}` : "";
@@ -353,7 +403,7 @@ function renderCurrentFlop() {
   const comboLiftTargets = visibleComboKeys(displayTiers, board);
   const comboLift = estimateRedrawComboLift(displayTiers, board, opponentCount, winRates, comboLiftTargets);
 
-  els.flopCards.innerHTML = board.map((card) => cardHtml(card)).join("");
+  renderBoardEditor(board);
   els.flopCode.textContent = boardKey;
   els.comboCount.textContent = totalCombos.toLocaleString();
   els.tierCount.textContent = tiers.length.toLocaleString();
@@ -363,6 +413,38 @@ function renderCurrentFlop() {
   els.nutMeta.textContent = `${formatPercentValue(nutsWinRate)} win est. vs ${opponentCount} opponent${opponentCount === 1 ? "" : "s"} · ${formatPercentage(nuts.combos.length, totalCombos)} deal frequency`;
   els.rankingList.innerHTML = displayTiers.map((tier, index) => tierHtml(tier, index, totalCombos, winRates.get(tier.key), comboLift)).join("");
   els.previousFlop.disabled = state.index <= 0;
+}
+
+function renderBoardEditor(board) {
+  els.flopCards.innerHTML = Array.from({ length: BOARD_SLOT_COUNT }, (_, index) => {
+    if (board[index]) return boardCardHtml(board[index], index, state.editingBoardIndex === index);
+
+    const disabled = index > board.length;
+    return boardPlaceholderHtml(index, state.editingBoardIndex === index, disabled);
+  }).join("");
+
+  if (state.editingBoardIndex === null) {
+    els.cardPicker.hidden = true;
+    els.cardPicker.innerHTML = "";
+    return;
+  }
+
+  const selectedCard = board[state.editingBoardIndex];
+  const blocked = new Set(board.filter((_, index) => index !== state.editingBoardIndex).map((card) => card.code));
+  const canRemove = state.editingBoardIndex >= 3 && Boolean(selectedCard);
+  els.cardPicker.hidden = false;
+  els.cardPicker.innerHTML = `
+    <div class="card-picker-head">
+      <strong>Choose ${STREET_LABELS[state.editingBoardIndex]} card</strong>
+      <div class="card-picker-actions">
+        ${canRemove ? `<button class="picker-remove" type="button" data-remove-street>Remove ${STREET_LABELS[state.editingBoardIndex]}</button>` : ""}
+        <button class="picker-close" type="button" data-close-picker aria-label="Close card picker">&times;</button>
+      </div>
+    </div>
+    <div class="card-picker-grid">
+      ${createDeck().map((card) => cardOptionHtml(card, blocked.has(card.code), selectedCard?.code === card.code)).join("")}
+    </div>
+  `;
 }
 
 function visibleComboKeys(tiers, board) {
@@ -557,7 +639,7 @@ function estimateComboWinRate(combo, board, opponentCount, samples, seedText) {
 
   for (let sample = 0; sample < samples; sample += 1) {
     const deck = createDeck().filter((card) => !hasCard(board, card) && !hasCard(combo, card));
-    const runout = [drawCard(deck, rng), drawCard(deck, rng)];
+    const runout = drawRunout(deck, rng, BOARD_SLOT_COUNT - board.length);
     const finalBoard = [...board, ...runout];
     const heroScore = evaluateBest([...finalBoard, ...combo]);
     let tiedOpponents = 0;
@@ -588,7 +670,7 @@ function estimateTierWinRate(tier, board, opponentCount, samples, seedText) {
   for (let sample = 0; sample < samples; sample += 1) {
     const hero = tier.combos[Math.floor(rng() * tier.combos.length)];
     const deck = createDeck().filter((card) => !hasCard(board, card) && !hasCard(hero, card));
-    const runout = [drawCard(deck, rng), drawCard(deck, rng)];
+    const runout = drawRunout(deck, rng, BOARD_SLOT_COUNT - board.length);
     const finalBoard = [...board, ...runout];
     const heroScore = evaluateBest([...finalBoard, ...hero]);
     let tiedOpponents = 0;
@@ -619,6 +701,12 @@ function hasCard(cards, target) {
 function drawCard(deck, rng) {
   const index = Math.floor(rng() * deck.length);
   return deck.splice(index, 1)[0];
+}
+
+function drawRunout(deck, rng, count) {
+  const runout = [];
+  for (let i = 0; i < count; i += 1) runout.push(drawCard(deck, rng));
+  return runout;
 }
 
 function comboKey(combo) {
@@ -668,10 +756,46 @@ function formatSignedPointValue(points) {
 }
 
 function pushFlop(flop) {
+  state.editingBoardIndex = null;
   state.history = state.history.slice(0, state.index + 1);
   state.history.push(flop);
   state.index = state.history.length - 1;
   renderCurrentFlop();
+}
+
+function replaceCardInBoard(board, index, cardCode) {
+  const replacement = createDeck().find((card) => card.code === cardCode);
+  if (!board || !replacement || index < 0 || index >= BOARD_SLOT_COUNT || index > board.length) return false;
+  if (board.some((card, boardIndex) => boardIndex !== index && card.code === replacement.code)) return false;
+
+  const updatedBoard = [...board];
+  updatedBoard[index] = replacement;
+  return normalizeCommunityBoard(updatedBoard);
+}
+
+function replaceBoardCard(index, cardCode) {
+  const updatedBoard = replaceCardInBoard(state.history[state.index], index, cardCode);
+  if (!updatedBoard) return false;
+
+  state.history[state.index] = updatedBoard;
+  state.editingBoardIndex = null;
+  renderCurrentFlop();
+  return true;
+}
+
+function removeBoardStreet(board, index) {
+  if (!board || index < 3 || index >= board.length) return false;
+  return board.slice(0, index);
+}
+
+function removeCurrentBoardStreet(index) {
+  const updatedBoard = removeBoardStreet(state.history[state.index], index);
+  if (!updatedBoard) return false;
+
+  state.history[state.index] = updatedBoard;
+  state.editingBoardIndex = null;
+  renderCurrentFlop();
+  return true;
 }
 
 function copyCurrentFlop() {
@@ -680,7 +804,7 @@ function copyCurrentFlop() {
   navigator.clipboard.writeText(text).then(() => {
     els.copyFlop.title = "Copied";
     window.setTimeout(() => {
-      els.copyFlop.title = "Copy flop";
+      els.copyFlop.title = "Copy board";
     }, 900);
   });
 }
@@ -700,10 +824,37 @@ function bootBrowserApp() {
     rankingList: document.querySelector("#ranking-list"),
     flopCode: document.querySelector("#flop-code"),
     opponentCount: document.querySelector("#opponent-count"),
+    cardPicker: document.querySelector("#card-picker"),
   };
 
   els.nextFlop.addEventListener("click", () => pushFlop(drawRandomFlop()));
   els.opponentCount.addEventListener("change", renderCurrentFlop);
+  els.flopCards.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-board-index]");
+    if (!button || button.disabled) return;
+
+    const index = Number(button.dataset.boardIndex);
+    state.editingBoardIndex = state.editingBoardIndex === index ? null : index;
+    renderCurrentFlop();
+  });
+  els.cardPicker.addEventListener("click", (event) => {
+    const closeButton = event.target.closest("[data-close-picker]");
+    if (closeButton) {
+      state.editingBoardIndex = null;
+      renderCurrentFlop();
+      return;
+    }
+
+    const removeButton = event.target.closest("[data-remove-street]");
+    if (removeButton && state.editingBoardIndex !== null) {
+      removeCurrentBoardStreet(state.editingBoardIndex);
+      return;
+    }
+
+    const option = event.target.closest("[data-card-code]");
+    if (!option || option.disabled || state.editingBoardIndex === null) return;
+    replaceBoardCard(state.editingBoardIndex, option.dataset.cardCode);
+  });
   els.rankingList.addEventListener("click", (event) => {
     const button = event.target.closest("[data-expand-target]");
     if (!button) return;
@@ -724,6 +875,12 @@ function bootBrowserApp() {
 
   window.addEventListener("keydown", (event) => {
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+    if (event.key === "Escape" && state.editingBoardIndex !== null) {
+      state.editingBoardIndex = null;
+      renderCurrentFlop();
+      return;
+    }
+    if (event.target.closest("button, select")) return;
     if (event.code === "Space" || event.key === "n" || event.key === "N") {
       event.preventDefault();
       pushFlop(drawRandomFlop());
@@ -750,6 +907,9 @@ globalThis.FlopTheNuts = {
   getHoleCombos,
   normalizeTierWinRates,
   rankAllHands,
+  removeBoardStreet,
+  replaceCardInBoard,
+  replaceBoardCard,
   sortCombosByRedraws,
   formatPercentValue,
   formatPercentage,

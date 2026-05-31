@@ -40,6 +40,8 @@ const state = {
   history: [],
   index: -1,
   editingBoardIndex: null,
+  heroCards: [],
+  editingHeroIndex: null,
 };
 
 let els = null;
@@ -47,6 +49,7 @@ let currentBoard = null;
 const boardAnalysisCache = new Map();
 const tierWinRateCache = new Map();
 const comboWinRateCache = new Map();
+const heroWinRateCache = new Map();
 
 function createDeck() {
   return RANKS.flatMap(([rank, value]) =>
@@ -330,6 +333,34 @@ function cardOptionHtml(card, blocked = false, selected = false) {
   `;
 }
 
+function heroCardHtml(card, index, selected = false) {
+  if (!card) {
+    return `
+      <button
+        class="board-card-button board-card-placeholder hero-card-placeholder${selected ? " selected" : ""}"
+        type="button"
+        data-hero-index="${index}"
+        aria-label="Choose hole card ${index + 1}"
+        aria-pressed="${selected}"
+      >
+        <span>Card ${index + 1}</span>
+      </button>
+    `;
+  }
+
+  return `
+    <button
+      class="board-card-button${selected ? " selected" : ""}"
+      type="button"
+      data-hero-index="${index}"
+      aria-label="Change hole card ${index + 1}: ${card.rank} of ${card.suitName}"
+      aria-pressed="${selected}"
+    >
+      ${cardHtml(card)}
+    </button>
+  `;
+}
+
 function comboHtml(combo, hidden = false, equityLift = null) {
   const tags = currentBoard ? comboRedrawTags(combo, currentBoard) : [];
   const liftText = equityLift !== null ? ` ${formatSignedPointValue(equityLift)}` : "";
@@ -404,6 +435,7 @@ function renderCurrentFlop() {
   const comboLift = estimateRedrawComboLift(displayTiers, board, opponentCount, winRates, comboLiftTargets);
 
   renderBoardEditor(board);
+  renderHeroEditor(board, analysis);
   els.flopCode.textContent = boardKey;
   els.comboCount.textContent = totalCombos.toLocaleString();
   els.tierCount.textContent = tiers.length.toLocaleString();
@@ -413,6 +445,38 @@ function renderCurrentFlop() {
   els.nutMeta.textContent = `${formatPercentValue(nutsWinRate)} win est. vs ${opponentCount} opponent${opponentCount === 1 ? "" : "s"} · ${formatPercentage(nuts.combos.length, totalCombos)} deal frequency`;
   els.rankingList.innerHTML = displayTiers.map((tier, index) => tierHtml(tier, index, totalCombos, winRates.get(tier.key), comboLift)).join("");
   els.previousFlop.disabled = state.index <= 0;
+}
+
+function renderHeroEditor(board, analysis) {
+  els.heroCards.innerHTML = [0, 1].map((index) => heroCardHtml(state.heroCards[index], index, state.editingHeroIndex === index)).join("");
+
+  if (state.editingHeroIndex === null) {
+    els.heroPicker.hidden = true;
+    els.heroPicker.innerHTML = "";
+  } else {
+    const selectedCard = state.heroCards[state.editingHeroIndex];
+    const blocked = new Set([
+      ...board.map((card) => card.code),
+      ...state.heroCards.filter((card, index) => card && index !== state.editingHeroIndex).map((card) => card.code),
+    ]);
+    els.heroPicker.hidden = false;
+    els.heroPicker.innerHTML = `
+      <div class="card-picker-head">
+        <strong>Choose hole card ${state.editingHeroIndex + 1}</strong>
+        <div class="card-picker-actions">
+          ${selectedCard ? `<button class="picker-remove" type="button" data-clear-hero-card>Clear</button>` : ""}
+          <button class="picker-close" type="button" data-close-hero-picker aria-label="Close hand picker">&times;</button>
+        </div>
+      </div>
+      <div class="card-picker-grid">
+        ${createDeck().map((card) => cardOptionHtml(card, blocked.has(card.code), selectedCard?.code === card.code)).join("")}
+      </div>
+    `;
+  }
+
+  const summary = getHeroHandSummary(state.heroCards, board, analysis, Number(els.opponentCount.value));
+  els.heroEquity.textContent = summary.title;
+  els.heroMeta.textContent = summary.meta;
 }
 
 function renderBoardEditor(board) {
@@ -430,7 +494,10 @@ function renderBoardEditor(board) {
   }
 
   const selectedCard = board[state.editingBoardIndex];
-  const blocked = new Set(board.filter((_, index) => index !== state.editingBoardIndex).map((card) => card.code));
+  const blocked = new Set([
+    ...board.filter((_, index) => index !== state.editingBoardIndex).map((card) => card.code),
+    ...state.heroCards.filter(Boolean).map((card) => card.code),
+  ]);
   const canRemove = state.editingBoardIndex >= 3 && Boolean(selectedCard);
   els.cardPicker.hidden = false;
   els.cardPicker.innerHTML = `
@@ -445,6 +512,38 @@ function renderBoardEditor(board) {
       ${createDeck().map((card) => cardOptionHtml(card, blocked.has(card.code), selectedCard?.code === card.code)).join("")}
     </div>
   `;
+}
+
+function getHeroHandSummary(heroCards, board, analysis, opponentCount) {
+  const selectedCards = heroCards.filter(Boolean);
+  if (selectedCards.length !== 2) {
+    return {
+      title: "Pick two cards",
+      meta: "Chance updates against the selected opponent count.",
+    };
+  }
+
+  if (selectedCards.some((heroCard) => hasCard(board, heroCard))) {
+    return {
+      title: "Blocked card",
+      meta: "Your hand cannot use a card already on the board.",
+    };
+  }
+
+  const heroCombo = sortCards(selectedCards);
+  const evaluation = evaluateBest([...board, ...heroCombo]);
+  const key = comboKey(heroCombo);
+  const tierIndex = analysis.tiers.findIndex((tier) => tier.key === evaluation.key);
+  const tier = analysis.tiers[tierIndex];
+  const comboResult = analysis.results.find((result) => comboKey(result.hole) === key);
+  const equity = cachedHeroWinRate(heroCombo, board, opponentCount);
+  const rank = tierIndex === 0 ? "Nuts" : `#${tierIndex + 1}`;
+  const tierSize = tier ? `${tier.combos.length} combo${tier.combos.length === 1 ? "" : "s"}` : "custom combo";
+
+  return {
+    title: `${formatPercentValue(equity)} win est.`,
+    meta: `${rank}: ${comboResult?.handName || describeScore(evaluation)} · ${CATEGORY_NAMES[evaluation.category]} · ${tierSize}`,
+  };
 }
 
 function visibleComboKeys(tiers, board) {
@@ -633,6 +732,20 @@ function comboEquitySamplesFor(opponentCount) {
   return Math.max(8, 18 - opponentCount);
 }
 
+function heroEquitySamplesFor(opponentCount) {
+  return Math.max(420, 900 - opponentCount * 45);
+}
+
+function cachedHeroWinRate(combo, board, opponentCount) {
+  const samples = heroEquitySamplesFor(opponentCount);
+  const key = `${boardCode(board)}:${comboKey(combo)}:${opponentCount}:${samples}:hero`;
+  if (!heroWinRateCache.has(key)) {
+    heroWinRateCache.set(key, estimateComboWinRate(combo, board, opponentCount, samples, key));
+  }
+
+  return heroWinRateCache.get(key);
+}
+
 function estimateComboWinRate(combo, board, opponentCount, samples, seedText) {
   const rng = seededRandom(hashText(seedText));
   let equity = 0;
@@ -757,10 +870,37 @@ function formatSignedPointValue(points) {
 
 function pushFlop(flop) {
   state.editingBoardIndex = null;
+  state.editingHeroIndex = null;
   state.history = state.history.slice(0, state.index + 1);
   state.history.push(flop);
   state.index = state.history.length - 1;
+  clearHeroCardsBlockedByBoard(flop);
   renderCurrentFlop();
+}
+
+function setHeroCard(index, cardCode) {
+  const board = state.history[state.index];
+  const card = createDeck().find((deckCard) => deckCard.code === cardCode);
+  if (!board || !card || index < 0 || index > 1) return false;
+  if (hasCard(board, card)) return false;
+  if (state.heroCards.some((heroCard, heroIndex) => heroIndex !== index && heroCard?.code === card.code)) return false;
+
+  state.heroCards[index] = card;
+  state.editingHeroIndex = null;
+  renderCurrentFlop();
+  return true;
+}
+
+function clearHeroCard(index) {
+  if (index < 0 || index > 1 || !state.heroCards[index]) return false;
+  state.heroCards[index] = null;
+  state.editingHeroIndex = null;
+  renderCurrentFlop();
+  return true;
+}
+
+function clearHeroCardsBlockedByBoard(board) {
+  state.heroCards = state.heroCards.map((card) => (card && hasCard(board, card) ? null : card));
 }
 
 function replaceCardInBoard(board, index, cardCode) {
@@ -779,6 +919,7 @@ function replaceBoardCard(index, cardCode) {
 
   state.history[state.index] = updatedBoard;
   state.editingBoardIndex = null;
+  clearHeroCardsBlockedByBoard(updatedBoard);
   renderCurrentFlop();
   return true;
 }
@@ -794,6 +935,7 @@ function removeCurrentBoardStreet(index) {
 
   state.history[state.index] = updatedBoard;
   state.editingBoardIndex = null;
+  clearHeroCardsBlockedByBoard(updatedBoard);
   renderCurrentFlop();
   return true;
 }
@@ -825,6 +967,10 @@ function bootBrowserApp() {
     flopCode: document.querySelector("#flop-code"),
     opponentCount: document.querySelector("#opponent-count"),
     cardPicker: document.querySelector("#card-picker"),
+    heroCards: document.querySelector("#hero-cards"),
+    heroPicker: document.querySelector("#hero-picker"),
+    heroEquity: document.querySelector("#hero-equity"),
+    heroMeta: document.querySelector("#hero-meta"),
   };
 
   els.nextFlop.addEventListener("click", () => pushFlop(drawRandomFlop()));
@@ -835,6 +981,7 @@ function bootBrowserApp() {
 
     const index = Number(button.dataset.boardIndex);
     state.editingBoardIndex = state.editingBoardIndex === index ? null : index;
+    state.editingHeroIndex = null;
     renderCurrentFlop();
   });
   els.cardPicker.addEventListener("click", (event) => {
@@ -855,6 +1002,33 @@ function bootBrowserApp() {
     if (!option || option.disabled || state.editingBoardIndex === null) return;
     replaceBoardCard(state.editingBoardIndex, option.dataset.cardCode);
   });
+  els.heroCards.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-hero-index]");
+    if (!button) return;
+
+    const index = Number(button.dataset.heroIndex);
+    state.editingHeroIndex = state.editingHeroIndex === index ? null : index;
+    state.editingBoardIndex = null;
+    renderCurrentFlop();
+  });
+  els.heroPicker.addEventListener("click", (event) => {
+    const closeButton = event.target.closest("[data-close-hero-picker]");
+    if (closeButton) {
+      state.editingHeroIndex = null;
+      renderCurrentFlop();
+      return;
+    }
+
+    const clearButton = event.target.closest("[data-clear-hero-card]");
+    if (clearButton && state.editingHeroIndex !== null) {
+      clearHeroCard(state.editingHeroIndex);
+      return;
+    }
+
+    const option = event.target.closest("[data-card-code]");
+    if (!option || option.disabled || state.editingHeroIndex === null) return;
+    setHeroCard(state.editingHeroIndex, option.dataset.cardCode);
+  });
   els.rankingList.addEventListener("click", (event) => {
     const button = event.target.closest("[data-expand-target]");
     if (!button) return;
@@ -868,6 +1042,7 @@ function bootBrowserApp() {
   els.previousFlop.addEventListener("click", () => {
     if (state.index > 0) {
       state.index -= 1;
+      clearHeroCardsBlockedByBoard(state.history[state.index]);
       renderCurrentFlop();
     }
   });
@@ -875,8 +1050,9 @@ function bootBrowserApp() {
 
   window.addEventListener("keydown", (event) => {
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
-    if (event.key === "Escape" && state.editingBoardIndex !== null) {
+    if (event.key === "Escape" && (state.editingBoardIndex !== null || state.editingHeroIndex !== null)) {
       state.editingBoardIndex = null;
+      state.editingHeroIndex = null;
       renderCurrentFlop();
       return;
     }
@@ -903,7 +1079,9 @@ globalThis.FlopTheNuts = {
   estimateRedrawComboLift,
   estimateTierWinRate,
   estimateTierWinRates,
+  cachedHeroWinRate,
   comboRedrawTags,
+  getHeroHandSummary,
   getHoleCombos,
   normalizeTierWinRates,
   rankAllHands,

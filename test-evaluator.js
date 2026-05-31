@@ -1,6 +1,6 @@
 await import("./app.js");
 
-const { evaluateBest, evaluateFive, rankAllHands, buildTiers, createDeck, estimateTierWinRates, normalizeTierWinRates, removeBoardStreet, replaceCardInBoard, sortCombosByRedraws } = globalThis.FlopTheNuts;
+const { evaluateBest, evaluateFive, rankAllHands, buildTiers, createDeck, estimateTierWinRates, getHeroHandSummary, normalizeTierWinRates, removeBoardStreet, replaceCardInBoard, sortCombosByRedraws } = globalThis.FlopTheNuts;
 
 const card = (rank, suit) => {
   const values = { A: 14, K: 13, Q: 12, J: 11, 10: 10, 9: 9, 8: 8, 7: 7, 6: 6, 5: 5, 4: 4, 3: 3, 2: 2 };
@@ -66,6 +66,24 @@ const tiers = buildTiers(rankAllHands(board));
 const totalCombos = tiers.reduce((sum, tier) => sum + tier.combos.length, 0);
 if (tiers.length <= 11 || totalCombos !== 1176) {
   throw new Error(`expected full tier set to cover 1,176 combos, got ${tiers.length} tiers and ${totalCombos} combos`);
+}
+const heroSummary = getHeroHandSummary(
+  ["2c", "3c"].map((code) => deck.find((deckCard) => deckCard.code === code)),
+  board,
+  { results: rankAllHands(board), tiers },
+  2,
+);
+if (!heroSummary.title.endsWith("win est.") || !heroSummary.meta.includes("#")) {
+  throw new Error("expected selected hero hand to return equity and tier metadata");
+}
+const blockedHeroSummary = getHeroHandSummary(
+  ["Qh", "Ks"].map((code) => deck.find((deckCard) => deckCard.code === code)),
+  board,
+  { results: rankAllHands(board), tiers },
+  2,
+);
+if (blockedHeroSummary.title !== "Blocked card") {
+  throw new Error("expected hero hand summary to reject board cards");
 }
 const turnCombos = rankAllHands(turnBoard).length;
 const riverCombos = rankAllHands(riverBoard).length;

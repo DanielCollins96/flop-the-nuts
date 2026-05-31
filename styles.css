@@ -59,7 +59,7 @@ select {
 .table-panel {
   min-width: 0;
   display: grid;
-  grid-template-rows: auto auto auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
 }
 
@@ -168,18 +168,34 @@ h2 {
     radial-gradient(ellipse at center, rgba(255, 255, 255, 0.08), transparent 45%),
     linear-gradient(135deg, var(--green) 0%, var(--green-deep) 100%);
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(210px, 0.86fr);
+  grid-template-areas:
+    "board board"
+    "hero nuts";
   align-content: start;
   align-items: start;
-  gap: 16px;
-  padding: 18px;
+  gap: 14px 18px;
+  padding: 16px;
   overflow: auto;
-  max-height: 430px;
+  max-height: none;
 }
 
 .board-zone,
+.hero-zone,
 .nut-readout {
   min-width: 0;
+}
+
+.board-zone {
+  grid-area: board;
+}
+
+.hero-zone {
+  grid-area: hero;
+}
+
+.nut-readout {
+  grid-area: nuts;
 }
 
 .zone-label,
@@ -201,6 +217,10 @@ h2 {
 }
 
 .board-cards {
+  flex-wrap: wrap;
+}
+
+.hero-cards {
   flex-wrap: wrap;
 }
 
@@ -314,8 +334,33 @@ h2 {
 
 .card-picker {
   margin-top: 12px;
+  max-width: 100%;
   border: 1px solid rgba(217, 170, 78, 0.45);
   background: rgba(5, 16, 18, 0.84);
+  overflow: hidden;
+}
+
+.hero-zone {
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.hero-readout {
+  margin-top: 10px;
+  display: grid;
+  gap: 3px;
+}
+
+.hero-readout strong {
+  font-size: clamp(1.15rem, 2vw, 1.45rem);
+  line-height: 1.1;
+}
+
+.hero-readout span {
+  color: rgba(239, 247, 244, 0.78);
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1.25;
 }
 
 .card-picker-head {
@@ -366,9 +411,11 @@ h2 {
 
 .card-picker-grid {
   display: grid;
-  grid-template-columns: repeat(13, minmax(30px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(34px, 1fr));
   gap: 4px;
   padding: 8px;
+  max-height: min(224px, 32vh);
+  overflow: auto;
 }
 
 .card-option {
@@ -395,7 +442,6 @@ h2 {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  border-left: 0;
   border-top: 1px solid rgba(255, 255, 255, 0.16);
   padding: 14px 0 0;
 }
@@ -728,6 +774,10 @@ h2 {
 
   .felt {
     grid-template-columns: 1fr;
+    grid-template-areas:
+      "board"
+      "hero"
+      "nuts";
   }
 
   .card-picker-grid {

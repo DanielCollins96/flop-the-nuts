@@ -245,6 +245,38 @@ h2 {
   position: relative;
 }
 
+.card-slot {
+  position: relative;
+  width: clamp(52px, 5vw, 72px);
+}
+
+.card-slot .board-card-button {
+  width: 100%;
+}
+
+.card-random-button {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  z-index: 2;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: var(--gold);
+  color: #111;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.28);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.card-random-button:hover {
+  filter: brightness(1.08);
+}
+
 .board-card-button::after {
   content: "";
   position: absolute;
@@ -261,6 +293,7 @@ h2 {
 
 .board-card-button:focus-visible,
 .card-option:focus-visible,
+.card-random-button:focus-visible,
 .picker-close:focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: 3px;

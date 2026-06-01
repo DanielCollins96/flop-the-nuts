@@ -316,30 +316,48 @@ function cardHtml(card, size = "") {
 
 function boardCardHtml(card, index, selected = false) {
   return `
-    <button
-      class="board-card-button${selected ? " selected" : ""}"
-      type="button"
-      data-board-index="${index}"
-      aria-label="Change ${STREET_LABELS[index]} card: ${card.rank} of ${card.suitName}"
-      aria-pressed="${selected}"
-    >
-      ${cardHtml(card)}
-    </button>
+    <div class="card-slot">
+      <button
+        class="board-card-button${selected ? " selected" : ""}"
+        type="button"
+        data-board-index="${index}"
+        aria-label="Change ${STREET_LABELS[index]} card: ${card.rank} of ${card.suitName}"
+        aria-pressed="${selected}"
+      >
+        ${cardHtml(card)}
+      </button>
+      ${randomCardButtonHtml("board", index, `Randomize ${STREET_LABELS[index]} card`)}
+    </div>
   `;
 }
 
 function boardPlaceholderHtml(index, selected = false, disabled = false) {
   return `
+    <div class="card-slot">
+      <button
+        class="board-card-button board-card-placeholder${selected ? " selected" : ""}"
+        type="button"
+        data-board-index="${index}"
+        ${disabled ? "disabled" : ""}
+        aria-label="${disabled ? "Add turn before river" : `Choose ${STREET_LABELS[index]} card`}"
+        aria-pressed="${selected}"
+      >
+        <span>${STREET_LABELS[index]}</span>
+      </button>
+      ${!disabled ? randomCardButtonHtml("board", index, `Randomize ${STREET_LABELS[index]} card`) : ""}
+    </div>
+  `;
+}
+
+function randomCardButtonHtml(type, index, label) {
+  return `
     <button
-      class="board-card-button board-card-placeholder${selected ? " selected" : ""}"
+      class="card-random-button"
       type="button"
-      data-board-index="${index}"
-      ${disabled ? "disabled" : ""}
-      aria-label="${disabled ? "Add turn before river" : `Choose ${STREET_LABELS[index]} card`}"
-      aria-pressed="${selected}"
-    >
-      <span>${STREET_LABELS[index]}</span>
-    </button>
+      data-random-${type}-index="${index}"
+      aria-label="${label}"
+      title="${label}"
+    >R</button>
   `;
 }
 
@@ -358,30 +376,27 @@ function cardOptionHtml(card, blocked = false, selected = false) {
 }
 
 function heroCardHtml(card, index, selected = false) {
-  if (!card) {
-    return `
+  const content = card 
+    ? cardHtml(card)
+    : `<span>Card ${index + 1}</span>`;
+  
+  const classes = ["board-card-button"];
+  if (!card) classes.push("board-card-placeholder", "hero-card-placeholder");
+  if (selected) classes.push("selected");
+  
+  return `
+    <div class="card-slot">
       <button
-        class="board-card-button board-card-placeholder hero-card-placeholder${selected ? " selected" : ""}"
+        class="${classes.join(" ")}"
         type="button"
         data-hero-index="${index}"
-        aria-label="Choose hole card ${index + 1}"
+        aria-label="${card ? `Change hole card ${index + 1}: ${card.rank} of ${card.suitName}` : `Choose hole card ${index + 1}`}"
         aria-pressed="${selected}"
       >
-        <span>Card ${index + 1}</span>
+        ${content}
       </button>
-    `;
-  }
-
-  return `
-    <button
-      class="board-card-button${selected ? " selected" : ""}"
-      type="button"
-      data-hero-index="${index}"
-      aria-label="Change hole card ${index + 1}: ${card.rank} of ${card.suitName}"
-      aria-pressed="${selected}"
-    >
-      ${cardHtml(card)}
-    </button>
+      ${randomCardButtonHtml("hero", index, `Randomize hole card ${index + 1}`)}
+    </div>
   `;
 }
 
@@ -947,6 +962,28 @@ function clearHeroCardsBlockedByBoard(board) {
   state.heroCards = state.heroCards.map((card) => (card && hasCard(board, card) ? null : card));
 }
 
+function randomAvailableCardCode(blockedCodes) {
+  const available = createDeck().filter((card) => !blockedCodes.has(card.code));
+  if (available.length === 0) return null;
+  return available[Math.floor(Math.random() * available.length)].code;
+}
+
+function randomHeroCard(index) {
+  const board = state.history[state.index];
+  const selectedCard = state.heroCards[index];
+  if (!board || index < 0 || index > 1) return false;
+
+  const blocked = new Set([
+    ...board.map((card) => card.code),
+    ...state.heroCards.filter((card, heroIndex) => card && heroIndex !== index).map((card) => card.code),
+  ]);
+  if (selectedCard) blocked.add(selectedCard.code);
+
+  const cardCode = randomAvailableCardCode(blocked);
+  if (!cardCode) return false;
+  return setHeroCard(index, cardCode);
+}
+
 function replaceCardInBoard(board, index, cardCode) {
   const replacement = createDeck().find((card) => card.code === cardCode);
   if (!board || !replacement || index < 0 || index >= BOARD_SLOT_COUNT || index > board.length) return false;
@@ -966,6 +1003,21 @@ function replaceBoardCard(index, cardCode) {
   clearHeroCardsBlockedByBoard(updatedBoard);
   renderCurrentFlop();
   return true;
+}
+
+function randomBoardCard(index) {
+  const board = state.history[state.index];
+  if (!board || index < 0 || index >= BOARD_SLOT_COUNT || index > board.length) return false;
+
+  const blocked = new Set([
+    ...board.filter((_, boardIndex) => boardIndex !== index).map((card) => card.code),
+    ...state.heroCards.filter(Boolean).map((card) => card.code),
+  ]);
+  if (board[index]) blocked.add(board[index].code);
+
+  const cardCode = randomAvailableCardCode(blocked);
+  if (!cardCode) return false;
+  return replaceBoardCard(index, cardCode);
 }
 
 function removeBoardStreet(board, index) {
@@ -1014,6 +1066,12 @@ function bootBrowserApp() {
   els.nextFlop.addEventListener("click", () => pushFlop(drawRandomFlop()));
   els.opponentCount.addEventListener("change", renderCurrentFlop);
   els.flopCards.addEventListener("click", (event) => {
+    const randomButton = event.target.closest("[data-random-board-index]");
+    if (randomButton) {
+      randomBoardCard(Number(randomButton.dataset.randomBoardIndex));
+      return;
+    }
+
     const button = event.target.closest("[data-board-index]");
     if (!button || button.disabled) return;
 
@@ -1041,6 +1099,12 @@ function bootBrowserApp() {
     replaceBoardCard(state.editingBoardIndex, option.dataset.cardCode);
   });
   els.heroCards.addEventListener("click", (event) => {
+    const randomButton = event.target.closest("[data-random-hero-index]");
+    if (randomButton) {
+      randomHeroCard(Number(randomButton.dataset.randomHeroIndex));
+      return;
+    }
+
     const button = event.target.closest("[data-hero-index]");
     if (!button) return;
 

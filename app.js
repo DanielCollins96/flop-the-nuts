@@ -107,70 +107,100 @@ function getHoleCombos(board) {
   return combos;
 }
 
-function evaluateFive(cards) {
-  if (cards.length !== 5) {
-    throw new Error("Flop evaluation requires exactly five cards.");
+/** Fast numeric evaluator that returns a single integer score for comparison */
+function evaluateFiveValue(c1, c2, c3, c4, c5) {
+  const v1 = c1.value, v2 = c2.value, v3 = c3.value, v4 = c4.value, v5 = c5.value;
+  // Flush check
+  const isFlush = c1.suit === c2.suit && c1.suit === c3.suit && c1.suit === c4.suit && c1.suit === c5.suit;
+
+  // Rank counts & sort
+  const r = [v1, v2, v3, v4, v5].sort((a, b) => b - a);
+
+  // Allocation-free frequency counting
+  const groups = [];
+  for (let i = 0; i < 5; i++) {
+    const val = r[i];
+    const existing = groups.find(g => g.val === val);
+    if (existing) {
+      existing.count++;
+    } else {
+      groups.push({ val, count: 1 });
+    }
+  }
+  groups.sort((a, b) => b.count - a.count || b.val - a.val);
+
+  // Straight check
+  let straightHigh = 0;
+  const isWheel = r[0] === 14 && r[1] === 5 && r[2] === 4 && r[3] === 3 && r[4] === 2;
+  if (isWheel) {
+    straightHigh = 5;
+  } else {
+    let isSequence = true;
+    for (let i = 0; i < 4; i++) {
+      if (r[i] - r[i + 1] !== 1) {
+        isSequence = false;
+        break;
+      }
+    }
+    if (isSequence) straightHigh = r[0];
   }
 
-  const ranks = sortNumbers(cards.map((card) => card.value));
-  const rankCounts = countBy(ranks);
-  const groups = [...rankCounts.entries()]
-    .map(([value, count]) => ({ value, count }))
-    .sort((a, b) => b.count - a.count || b.value - a.value);
-  const flush = new Set(cards.map((card) => card.suit)).size === 1;
-  const straightHigh = getStraightHigh([...new Set(ranks)]);
+  let cat = 0;
+  let t = [0, 0, 0, 0, 0];
 
-  if (flush && straightHigh) return score(8, [straightHigh]);
-  if (groups[0].count === 4) {
-    return score(7, [groups[0].value, groups[1].value]);
-  }
-  if (groups[0].count === 3 && groups[1].count === 2) {
-    return score(6, [groups[0].value, groups[1].value]);
-  }
-  if (flush) return score(5, ranks);
-  if (straightHigh) return score(4, [straightHigh]);
-  if (groups[0].count === 3) {
-    return score(3, [groups[0].value, ...groups.slice(1).map((group) => group.value).sort((a, b) => b - a)]);
-  }
-  if (groups[0].count === 2 && groups[1].count === 2) {
-    const pairs = groups.filter((group) => group.count === 2).map((group) => group.value).sort((a, b) => b - a);
-    const kicker = groups.find((group) => group.count === 1).value;
-    return score(2, [...pairs, kicker]);
-  }
-  if (groups[0].count === 2) {
-    return score(1, [groups[0].value, ...groups.slice(1).map((group) => group.value).sort((a, b) => b - a)]);
-  }
-  return score(0, ranks);
+  if (isFlush && straightHigh) { cat = 8; t = [straightHigh]; }
+  else if (groups[0].count === 4) { cat = 7; t = [groups[0].val, groups[1].val]; }
+  else if (groups[0].count === 3 && groups[1].count === 2) { cat = 6; t = [groups[0].val, groups[1].val]; }
+  else if (isFlush) { cat = 5; t = r; }
+  else if (straightHigh) { cat = 4; t = [straightHigh]; }
+  else if (groups[0].count === 3) { cat = 3; t = [groups[0].val, groups[1].val, groups[2].val]; }
+  else if (groups[0].count === 2 && groups[1].count === 2) { cat = 2; t = [groups[0].val, groups[1].val, groups[2].val]; }
+  else if (groups[0].count === 2) { cat = 1; t = [groups[0].val, groups[1].val, groups[2].val, groups[3].val]; }
+  else { cat = 0; t = r; }
+
+  // Encode to 32-bit int: [4 bits cat][4 bits t1][4 bits t2][4 bits t3][4 bits t4][4 bits t5]
+  return (cat << 20) | (t[0] << 16) | (t[1] << 12) | (t[2] << 8) | (t[3] << 4) | (t[4] || 0);
 }
 
-function evaluateBest(cards) {
-  if (cards.length < 5) {
-    throw new Error("At least five cards are required to evaluate a hand.");
-  }
-  if (cards.length === 5) return evaluateFive(cards);
+function evaluateFive(cards) {
+  const value = evaluateFiveValue(cards[0], cards[1], cards[2], cards[3], cards[4]);
+  const category = (value >> 20) & 0xf;
+  const t = [(value >> 16) & 0xf, (value >> 12) & 0xf, (value >> 8) & 0xf, (value >> 4) & 0xf, value & 0xf].filter(v => v > 0);
+  return {
+    category,
+    tiebreakers: t,
+    key: `${category}:${t.join(".")}`,
+    value
+  };
+}
 
-  let best = null;
-  for (let a = 0; a < cards.length - 4; a += 1) {
-    for (let b = a + 1; b < cards.length - 3; b += 1) {
-      for (let c = b + 1; c < cards.length - 2; c += 1) {
-        for (let d = c + 1; d < cards.length - 1; d += 1) {
-          for (let e = d + 1; e < cards.length; e += 1) {
-            const scoreToCheck = evaluateFive([cards[a], cards[b], cards[c], cards[d], cards[e]]);
-            if (!best || compareScores(scoreToCheck, best) > 0) best = scoreToCheck;
+function evaluateBestValue(cards) {
+  let best = -1;
+  const len = cards.length;
+  for (let a = 0; a < len - 4; a++) {
+    for (let b = a + 1; b < len - 3; b++) {
+      for (let c = b + 1; c < len - 2; c++) {
+        for (let d = c + 1; d < len - 1; d++) {
+          for (let e = d + 1; e < len; e++) {
+            const val = evaluateFiveValue(cards[a], cards[b], cards[c], cards[d], cards[e]);
+            if (val > best) best = val;
           }
         }
       }
     }
   }
-
   return best;
 }
 
-function score(category, tiebreakers) {
+function evaluateBest(cards) {
+  const value = evaluateBestValue(cards);
+  const category = (value >> 20) & 0xf;
+  const t = [(value >> 16) & 0xf, (value >> 12) & 0xf, (value >> 8) & 0xf, (value >> 4) & 0xf, value & 0xf].filter(v => v > 0);
   return {
     category,
-    tiebreakers,
-    key: `${category}:${tiebreakers.join(".")}`,
+    tiebreakers: t,
+    key: `${category}:${t.join(".")}`,
+    value
   };
 }
 
@@ -197,15 +227,7 @@ function getStraightHigh(uniqueRanksDesc) {
 }
 
 function compareScores(a, b) {
-  if (a.category !== b.category) return a.category - b.category;
-
-  const length = Math.max(a.tiebreakers.length, b.tiebreakers.length);
-  for (let i = 0; i < length; i += 1) {
-    const delta = (a.tiebreakers[i] || 0) - (b.tiebreakers[i] || 0);
-    if (delta !== 0) return delta;
-  }
-
-  return 0;
+  return a.value - b.value;
 }
 
 function compareCardsForDisplay(a, b) {
@@ -219,7 +241,6 @@ function rankAllHands(board) {
       return {
         hole,
         evaluation,
-        handName: describeScore(evaluation),
       };
     })
     .sort((a, b) => compareScores(b.evaluation, a.evaluation) || compareCardsForDisplay(a.hole, b.hole));
@@ -234,7 +255,7 @@ function buildTiers(results) {
       tiers.push({
         key: result.evaluation.key,
         evaluation: result.evaluation,
-        handName: result.handName,
+        handName: describeScore(result.evaluation),
         combos: [result.hole],
       });
     } else {
@@ -551,14 +572,13 @@ function getHeroHandSummary(heroCards, board, analysis, opponentCount) {
   const key = comboKey(heroCombo);
   const tierIndex = analysis.tiers.findIndex((tier) => tier.key === evaluation.key);
   const tier = analysis.tiers[tierIndex];
-  const comboResult = analysis.results.find((result) => comboKey(result.hole) === key);
   const equity = cachedHeroWinRate(heroCombo, board, opponentCount);
   const rank = tierIndex === 0 ? "Nuts" : `#${tierIndex + 1}`;
   const tierSize = tier ? `${tier.combos.length} combo${tier.combos.length === 1 ? "" : "s"}` : "custom combo";
 
   return {
     title: `${formatPercentValue(equity)} win est.`,
-    meta: `${rank}: ${comboResult?.handName || describeScore(evaluation)} · ${CATEGORY_NAMES[evaluation.category]} · ${tierSize}`,
+    meta: `${rank}: ${describeScore(evaluation)} · ${CATEGORY_NAMES[evaluation.category]} · ${tierSize}`,
   };
 }
 
@@ -765,19 +785,22 @@ function cachedHeroWinRate(combo, board, opponentCount) {
 function estimateComboWinRate(combo, board, opponentCount, samples, seedText) {
   const rng = seededRandom(hashText(seedText));
   let equity = 0;
+  const boardCodes = new Set(board.map((c) => c.code));
+  const comboCodes = new Set(combo.map((c) => c.code));
+  const baseDeck = createDeck().filter((card) => !boardCodes.has(card.code) && !comboCodes.has(card.code));
 
   for (let sample = 0; sample < samples; sample += 1) {
-    const deck = createDeck().filter((card) => !hasCard(board, card) && !hasCard(combo, card));
+    const deck = [...baseDeck];
     const runout = drawRunout(deck, rng, BOARD_SLOT_COUNT - board.length);
     const finalBoard = [...board, ...runout];
-    const heroScore = evaluateBest([...finalBoard, ...combo]);
+    const heroScore = evaluateBestValue([...finalBoard, ...combo]);
     let tiedOpponents = 0;
     let beaten = false;
 
     for (let opponent = 0; opponent < opponentCount; opponent += 1) {
       const opponentHand = [drawCard(deck, rng), drawCard(deck, rng)];
-      const opponentScore = evaluateBest([...finalBoard, ...opponentHand]);
-      const comparison = compareScores(heroScore, opponentScore);
+      const opponentScore = evaluateBestValue([...finalBoard, ...opponentHand]);
+      const comparison = heroScore - opponentScore;
 
       if (comparison < 0) {
         beaten = true;
@@ -795,20 +818,22 @@ function estimateComboWinRate(combo, board, opponentCount, samples, seedText) {
 function estimateTierWinRate(tier, board, opponentCount, samples, seedText) {
   const rng = seededRandom(hashText(seedText));
   let equity = 0;
+  const boardCodes = new Set(board.map((c) => c.code));
+  const baseDeck = createDeck().filter((card) => !boardCodes.has(card.code));
 
   for (let sample = 0; sample < samples; sample += 1) {
     const hero = tier.combos[Math.floor(rng() * tier.combos.length)];
-    const deck = createDeck().filter((card) => !hasCard(board, card) && !hasCard(hero, card));
+    const deck = baseDeck.filter((card) => card.code !== hero[0].code && card.code !== hero[1].code);
     const runout = drawRunout(deck, rng, BOARD_SLOT_COUNT - board.length);
     const finalBoard = [...board, ...runout];
-    const heroScore = evaluateBest([...finalBoard, ...hero]);
+    const heroScore = evaluateBestValue([...finalBoard, ...hero]);
     let tiedOpponents = 0;
     let beaten = false;
 
     for (let opponent = 0; opponent < opponentCount; opponent += 1) {
       const opponentHand = [drawCard(deck, rng), drawCard(deck, rng)];
-      const opponentScore = evaluateBest([...finalBoard, ...opponentHand]);
-      const comparison = compareScores(heroScore, opponentScore);
+      const opponentScore = evaluateBestValue([...finalBoard, ...opponentHand]);
+      const comparison = heroScore - opponentScore;
 
       if (comparison < 0) {
         beaten = true;
@@ -829,7 +854,10 @@ function hasCard(cards, target) {
 
 function drawCard(deck, rng) {
   const index = Math.floor(rng() * deck.length);
-  return deck.splice(index, 1)[0];
+  const card = deck[index];
+  deck[index] = deck[deck.length - 1];
+  deck.pop();
+  return card;
 }
 
 function drawRunout(deck, rng, count) {

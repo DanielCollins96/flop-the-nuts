@@ -1,6 +1,6 @@
 await import("./app.js");
 
-const { evaluateBest, evaluateFive, rankAllHands, buildTiers, createDeck, estimateTierWinRates, getHeroHandSummary, normalizeTierWinRates, removeBoardStreet, replaceCardInBoard, sortCombosByRedraws } = globalThis.FlopTheNuts;
+const { evaluateBest, evaluateFive, rankAllHands, buildTiers, createDeck, estimateComboWinRate, estimateTierWinRates, getHeroHandSummary, normalizeTierWinRates, removeBoardStreet, replaceCardInBoard, sortCombosByRedraws } = globalThis.FlopTheNuts;
 
 const card = (rank, suit) => {
   const values = { A: 14, K: 13, Q: 12, J: 11, 10: 10, 9: 9, 8: 8, 7: 7, 6: 6, 5: 5, 4: 4, 3: 3, 2: 2 };
@@ -93,6 +93,16 @@ if (turnCombos !== 1128 || riverCombos !== 1081) {
 const winRates = estimateTierWinRates(tiers.slice(0, 3), board, 2);
 if (winRates.size !== 3 || [...winRates.values()].some((rate) => rate < 0 || rate > 100)) {
   throw new Error("expected win estimates to be valid percentages");
+}
+const weakComboWinRate = estimateComboWinRate(
+  ["2c", "3d"].map((code) => deck.find((deckCard) => deckCard.code === code)),
+  board,
+  2,
+  200,
+  "weak-combo-regression",
+);
+if (weakComboWinRate <= 0 || weakComboWinRate >= 100) {
+  throw new Error(`expected weak combo equity to be between 0% and 100%, got ${weakComboWinRate}`);
 }
 const normalizedWinRates = normalizeTierWinRates(tiers.slice(0, 3), new Map([
   [tiers[0].key, 88],
